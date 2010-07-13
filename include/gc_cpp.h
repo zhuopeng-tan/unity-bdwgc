@@ -256,20 +256,47 @@ inline void* operator new(
   *  including this everywhere.
   */
 #if _MSC_VER > 1020
- void *operator new[]( size_t size );
+void *operator new[]( size_t size ){
+    return GC_MALLOC_UNCOLLECTABLE( size );}
 
- void operator delete[](void* obj);
+void operator delete[]( void* obj ) {
+    GC_FREE( obj );}
+
 #endif
 
- void* operator new( size_t size);
+ 
+// void* operator new( size_t size);
+// void operator delete(void* obj);
 
- void operator delete(void* obj);
+	// MOVED HERE FROM gc_hpp.cc!
+	void* operator new(size_t size) 
+	{
+		return GC_MALLOC_UNCOLLECTABLE(size);
+	}
+
+	void operator delete(void* obj) 
+	{
+		GC_FREE(obj);
+	}
+
 
  // This new operator is used by VC++ in case of Debug builds !
  void* operator new(  size_t size,
                       int ,//nBlockUse,
                       const char * szFileName,
-                      int nLine );
+                      int nLine )
+	{
+#ifndef GC_DEBUG
+	        return GC_malloc_uncollectable( size );
+#else
+		    return GC_debug_malloc_uncollectable(size, szFileName, nLine);
+#endif
+	}
+void* operator new[](size_t size, int nBlockUse, const char* szFileName, int nLine)
+{
+    return operator new(size, nBlockUse, szFileName, nLine);
+}
+
 #endif /* _MSC_VER */
 
 
