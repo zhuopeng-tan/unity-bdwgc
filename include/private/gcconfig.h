@@ -2550,7 +2550,8 @@
 # endif
 
 # if defined(REDIRECT_MALLOC) && defined(THREADS) && !defined(LINUX)
-#   error "REDIRECT_MALLOC with THREADS works at most on Linux."
+// FIXME: no idea if this is really true!
+//#   error "REDIRECT_MALLOC with THREADS works at most on Linux."
 # endif
 
 #ifdef GC_PRIVATE_H

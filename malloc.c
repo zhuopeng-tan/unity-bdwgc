@@ -304,6 +304,7 @@ GC_API char * GC_CALL GC_strdup(const char *s)
 # define GC_debug_malloc_replacement(lb) \
                         GC_debug_malloc(lb, RA "unknown", 0)
 
+#if 0
 void * malloc(size_t lb)
 {
     /* It might help to manually inline the GC_malloc call here.        */
@@ -321,6 +322,7 @@ void * malloc(size_t lb)
 #   endif /* I386 && GC_SOLARIS_THREADS */
     return((void *)REDIRECT_MALLOC(lb));
 }
+#endif
 
 #if defined(GC_LINUX_THREADS) /* && !defined(USE_PROC_FOR_LIBRARIES) */
   STATIC ptr_t GC_libpthread_start = 0;
@@ -347,6 +349,7 @@ void * malloc(size_t lb)
   }
 #endif
 
+#if 0
 void * calloc(size_t n, size_t lb)
 {
 #   if defined(GC_LINUX_THREADS) /* && !defined(USE_PROC_FOR_LIBRARIES) */
@@ -370,6 +373,7 @@ void * calloc(size_t n, size_t lb)
 #   endif
     return((void *)REDIRECT_MALLOC(n*lb));
 }
+#endif
 
 #ifndef strdup
 # include <string.h>
@@ -499,7 +503,7 @@ GC_API void GC_CALL GC_free(void * p)
 # define REDIRECT_FREE GC_free
 #endif
 
-#ifdef REDIRECT_FREE
+#if 0//def REDIRECT_FREE
   void free(void * p)
   {
 #   if defined(GC_LINUX_THREADS) && !defined(USE_PROC_FOR_LIBRARIES)

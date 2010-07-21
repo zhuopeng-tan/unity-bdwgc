@@ -27,6 +27,10 @@
  * problems.
  */
 
+#define REDIRECT_MALLOC		GC_MALLOC_UNCOLLECTABLE
+#define REDIRECT_FREE		GC_FREE
+#define REDIRECT_REALLOC	GC_REALLOC
+
 #ifndef GC_H
 #define GC_H
 
@@ -1328,6 +1332,19 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 # endif /* !GC_NO_THREAD_REDIRECTS */
 
 #endif /* GC_WIN32_THREADS */
+
+#ifdef REDIRECT_MALLOC
+#include <stdlib.h>
+#ifdef __cplusplus
+#include <cstdlib>
+#endif // __cplusplus
+#ifndef GC_BUILD
+#define free				REDIRECT_FREE 
+#define malloc				REDIRECT_MALLOC
+#define calloc(n, lb)		REDIRECT_MALLOC((n) * (lb))
+#define realloc(p, lb)		REDIRECT_REALLOC((p), (lb))
+#endif // GC_BUILD
+#endif // REDIRECT_MALLOC
 
 /* Public setter and getter for switching "unmap as much as possible"   */
 /* mode on(1) and off(0).  Has no effect unless unmapping is turned on. */
