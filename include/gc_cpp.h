@@ -142,6 +142,8 @@ by UseGC.  GC is an alias for UseGC, unless GC_NAME_CONFLICT is defined.
 
 #include "gc.h"
 
+#ifdef __cplusplus
+
 #ifndef THINK_CPLUS
 #  define GC_cdecl GC_CALLBACK
 #else
@@ -256,10 +258,10 @@ inline void* operator new(
   *  including this everywhere.
   */
 #if _MSC_VER > 1020
-void *operator new[]( size_t size ){
+inline void *operator new[]( size_t size ){
     return GC_MALLOC_UNCOLLECTABLE( size );}
 
-void operator delete[]( void* obj ) {
+inline void operator delete[]( void* obj ) {
     GC_FREE( obj );}
 
 #endif
@@ -269,19 +271,19 @@ void operator delete[]( void* obj ) {
 // void operator delete(void* obj);
 
 	// MOVED HERE FROM gc_hpp.cc!
-	void* operator new(size_t size) 
+	inline void* operator new(size_t size) 
 	{
 		return GC_MALLOC_UNCOLLECTABLE(size);
 	}
 
-	void operator delete(void* obj) 
+	inline void operator delete(void* obj) 
 	{
 		GC_FREE(obj);
 	}
 
 
  // This new operator is used by VC++ in case of Debug builds !
- void* operator new(  size_t size,
+ inline void* operator new(  size_t size,
                       int ,//nBlockUse,
                       const char * szFileName,
                       int nLine )
@@ -292,7 +294,7 @@ void operator delete[]( void* obj ) {
 		    return GC_debug_malloc_uncollectable(size, szFileName, nLine);
 #endif
 	}
-void* operator new[](size_t size, int nBlockUse, const char* szFileName, int nLine)
+inline void* operator new[](size_t size, int nBlockUse, const char* szFileName, int nLine)
 {
     return operator new(size, nBlockUse, szFileName, nLine);
 }
@@ -427,5 +429,16 @@ inline void* operator new[](
     return ::operator new( size, gcp, cleanup, clientData );}
 
 #endif /* GC_OPERATOR_NEW_ARRAY */
+
+// oooohh... big hack (mainly for vnl which explicitly references mem-stuff via std namespace)
+namespace std
+{
+	using ::GC_debug_malloc_uncollectable;
+	using ::GC_debug_realloc;
+	using ::GC_realloc;
+	using ::GC_malloc_uncollectable;
+}
+
+#endif // __cplusplus
 
 #endif /* GC_CPP_H */

@@ -975,10 +975,11 @@ GC_API void GC_CALLBACK GC_ignore_warn_proc(char *, GC_word);
 
 /* The GC-prefixed symbols are preferred for new code (I_HIDE_POINTERS, */
 /* HIDE_POINTER and REVEAL_POINTER remain for compatibility).           */
-#ifdef GC_I_HIDE_POINTERS
-# define GC_HIDE_POINTER(p) HIDE_POINTER(p)
-# define GC_REVEAL_POINTER(p) REVEAL_POINTER(p)
-#endif
+//#ifdef GC_I_HIDE_POINTERS
+  typedef GC_word GC_hidden_pointer;
+# define GC_HIDE_POINTER(p) (~(GC_hidden_pointer)(p))
+# define GC_REVEAL_POINTER(p) ((void*) (~(GC_hidden_pointer)(p)))
+//#endif
 
 typedef void * (GC_CALLBACK * GC_fn_type)(void * /* client_data */);
 GC_API void * GC_CALL GC_call_with_alloc_lock(GC_fn_type /* fn */,
@@ -1223,11 +1224,40 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #     include <process.h> /* For _beginthreadex, _endthreadex */
 #   endif
 
-#   include <windows.h>
 
 #   ifdef __cplusplus
       extern "C" {
 #   endif
+
+#ifdef GC_BUILD
+#   include <windows.h>
+#else
+		  // copied from various windows header files
+		typedef void			*HANDLE;
+		#define WINAPI			__stdcall
+		typedef unsigned long	DWORD;
+		typedef DWORD			*LPDWORD;
+		typedef int				BOOL;
+		#if defined(_WIN64)
+			typedef unsigned __int64 ULONG_PTR;
+		#else
+			typedef unsigned long ULONG_PTR;
+		#endif
+		typedef ULONG_PTR SIZE_T;
+
+		struct _SECURITY_ATTRIBUTES;
+		typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(void* lpThreadParameter);
+
+		__declspec(dllimport) HANDLE WINAPI CreateThread(
+				struct _SECURITY_ATTRIBUTES* lpThreadAttributes, 
+				SIZE_T dwStackSize,
+				PTHREAD_START_ROUTINE lpStartAddress, 
+				void* lpParameter, 
+				DWORD dwCreationFlags, 
+				DWORD* lpThreadId);
+
+		__declspec(dllimport) __declspec(noreturn) void WINAPI ExitThread(DWORD dwExitCode);
+#endif
 
 #   ifdef GC_UNDERSCORE_STDCALL
       /* Explicitly prefix exported/imported WINAPI (__stdcall) symbols */
@@ -1247,13 +1277,13 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
     /* terminate normally, or call GC_endthreadex() or GC_ExitThread,   */
     /* so that the thread is properly unregistered.                     */
     GC_API HANDLE WINAPI GC_CreateThread(
-                LPSECURITY_ATTRIBUTES /* lpThreadAttributes */,
+                struct _SECURITY_ATTRIBUTES* /* lpThreadAttributes */,
                 DWORD /* dwStackSize */,
-                LPTHREAD_START_ROUTINE /* lpStartAddress */,
-                LPVOID /* lpParameter */, DWORD /* dwCreationFlags */,
+                PTHREAD_START_ROUTINE /* lpStartAddress */,
+                void* /* lpParameter */, DWORD /* dwCreationFlags */,
                 LPDWORD /* lpThreadId */);
 
-    GC_API void WINAPI GC_ExitThread(DWORD /* dwExitCode */);
+    GC_API __declspec(noreturn) void WINAPI GC_ExitThread(DWORD /* dwExitCode */);
 
 #   if !defined(_WIN32_WCE) && !defined(__CEGCC__)
 #     if !defined(_UINTPTR_T) && !defined(_UINTPTR_T_DEFINED) \
@@ -1437,3 +1467,8 @@ GC_API void GC_CALL GC_win32_free_heap(void);
 #endif
 
 #endif /* GC_H */
+
+
+#ifdef __cplusplus
+#include "gc_cpp.h"
+#endif
