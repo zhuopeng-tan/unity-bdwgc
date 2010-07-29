@@ -258,7 +258,7 @@ inline void* operator new(
   *  including this everywhere.
   */
 #if _MSC_VER > 1020
-inline void *operator new[]( size_t size ){
+_Ret_bytecap_(_Size) inline void *operator new[]( size_t size ){
     return GC_MALLOC_UNCOLLECTABLE( size );}
 
 inline void operator delete[]( void* obj ) {
@@ -283,7 +283,7 @@ inline void operator delete[]( void* obj ) {
 
 
  // This new operator is used by VC++ in case of Debug builds !
- inline void* operator new(  size_t size,
+_Ret_bytecap_(_Size) inline void* operator new(  size_t size,
                       int ,//nBlockUse,
                       const char * szFileName,
                       int nLine )
@@ -294,7 +294,7 @@ inline void operator delete[]( void* obj ) {
 		    return GC_debug_malloc_uncollectable(size, szFileName, nLine);
 #endif
 	}
-inline void* operator new[](size_t size, int nBlockUse, const char* szFileName, int nLine)
+_Ret_bytecap_(_Size) inline void* operator new[](size_t size, int nBlockUse, const char* szFileName, int nLine)
 {
     return operator new(size, nBlockUse, szFileName, nLine);
 }
