@@ -159,7 +159,13 @@ GC_API void GC_CALL GC_use_DllMain(void)
     ABORT("GC DllMain-based thread registration unsupported");
 # else
     /* Turn on GC_win32_dll_threads. */
-    GC_ASSERT(!parallel_initialized);
+
+	// we dont need this assert here
+	// GC_init_parallel() does nothing if parallel_initialized==true
+	// also it breaks calling GC_use_DllMain() from DllMain()
+	//  (because it gets called many times, during startup and shutdown)
+//	GC_ASSERT(!parallel_initialized);
+
     GC_win32_dll_threads = TRUE;
     GC_init_parallel();
 # endif
