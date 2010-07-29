@@ -1297,14 +1297,14 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
     /* so that the thread is properly unregistered.                     */
     GC_API HANDLE WINAPI GC_CreateThread(
                 struct _SECURITY_ATTRIBUTES* /* lpThreadAttributes */,
-                DWORD /* dwStackSize */,
+                SIZE_T /* dwStackSize */,
                 PTHREAD_START_ROUTINE /* lpStartAddress */,
                 void* /* lpParameter */, DWORD /* dwCreationFlags */,
                 LPDWORD /* lpThreadId */);
 
 #   ifndef DECLSPEC_NORETURN
       /* Typically defined in winnt.h. */
-#     define DECLSPEC_NORETURN __declspec(noreturn)
+#     define DECLSPEC_NORETURN  __declspec(noreturn)
 #   endif
 
     GC_API DECLSPEC_NORETURN void WINAPI GC_ExitThread(

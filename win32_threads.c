@@ -2019,7 +2019,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
 
   GC_API HANDLE WINAPI GC_CreateThread(
                         LPSECURITY_ATTRIBUTES lpThreadAttributes,
-                        DWORD dwStackSize,
+                        SIZE_T dwStackSize,
                         LPTHREAD_START_ROUTINE lpStartAddress,
                         LPVOID lpParameter, DWORD dwCreationFlags,
                         LPDWORD lpThreadId)
