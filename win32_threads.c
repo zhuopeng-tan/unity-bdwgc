@@ -2558,6 +2558,10 @@ GC_INNER void GC_thr_init(void)
 #     endif
       static int entry_count = 0;
 
+	  // despite the comment above
+	  //  this seems to work fine...
+	  GC_use_DllMain();
+
       if (parallel_initialized && !GC_win32_dll_threads) return TRUE;
 
       switch (reason) {
