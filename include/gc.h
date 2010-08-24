@@ -1357,15 +1357,21 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #endif /* GC_WIN32_THREADS */
 
 #ifdef REDIRECT_MALLOC
+// all the functions we redirect here need to have their header included
+//  prior to macro def-ing! otherwise the headers will be included after gc.h has
+//  been force-included and then we have two clashing symbols!
 #include <stdlib.h>
+#include <string.h>
 #ifdef __cplusplus
 #include <cstdlib>
+#include <cstring>
 #endif // __cplusplus
 #ifndef GC_BUILD
 #define free				REDIRECT_FREE 
 #define malloc				REDIRECT_MALLOC
 #define calloc(n, lb)		REDIRECT_MALLOC((n) * (lb))
 #define realloc(p, lb)		REDIRECT_REALLOC((p), (lb))
+#define strdup				GC_STRDUP
 #endif // GC_BUILD
 #endif // REDIRECT_MALLOC
 

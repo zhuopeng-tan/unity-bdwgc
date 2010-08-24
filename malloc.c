@@ -375,6 +375,7 @@ void * calloc(size_t n, size_t lb)
 }
 #endif
 
+#if 0
 #ifndef strdup
 # include <string.h>
   char *strdup(const char *s)
@@ -392,6 +393,7 @@ void * calloc(size_t n, size_t lb)
  /* If strdup is macro defined, we assume that it actually calls malloc, */
  /* and thus the right thing will happen even without overriding it.     */
  /* This seems to be true on most Linux systems.                         */
+#endif
 
 #undef GC_debug_malloc_replacement
 
