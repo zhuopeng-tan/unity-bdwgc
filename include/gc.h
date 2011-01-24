@@ -677,6 +677,9 @@ GC_API char * GC_CALL GC_debug_strdup(const char *,
 GC_API void * GC_CALL GC_debug_malloc_uncollectable(
                         size_t /* size_in_bytes */, GC_EXTRA_PARAMS)
                         GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1);
+GC_API void * GC_CALL GC_debug_malloc_atomic_uncollectable(
+						size_t /* size_in_bytes */, GC_EXTRA_PARAMS)
+						GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1);
 GC_API void * GC_CALL GC_debug_malloc_stubborn(size_t /* size_in_bytes */,
                                                GC_EXTRA_PARAMS)
                         GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1);
@@ -722,7 +725,7 @@ GC_API void * GC_CALL GC_debug_realloc_replacement(void * /* object_addr */,
 # define GC_MALLOC_ATOMIC_IGNORE_OFF_PAGE(sz) \
                         GC_debug_malloc_atomic_ignore_off_page(sz, GC_EXTRAS)
 # define GC_REALLOC(old, sz) GC_debug_realloc(old, sz, GC_EXTRAS)
-# define GC_MALLOC_ATOMIC_UNCOLLECTABLE(sz) GC_debug_malloc_atomic_uncollectable(sz)
+# define GC_MALLOC_ATOMIC_UNCOLLECTABLE(sz) GC_debug_malloc_atomic_uncollectable(sz, GC_EXTRAS)
 # define GC_FREE(p) GC_debug_free(p)
 # define GC_REGISTER_FINALIZER(p, f, d, of, od) \
       GC_debug_register_finalizer(p, f, d, of, od)
