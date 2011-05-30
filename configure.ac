@@ -395,7 +395,8 @@ case "$host" in
  alpha*-*-linux*)
     machdep="mach_dep.lo"
     ;;
- i?86-*-solaris2.[[89]] | i?86-*-solaris2.1?)
+ i?86-*-solaris2.[[89]])
+    # PROC_VDB appears to work in 2.8 and 2.9 but not in 2.10+ (for now).
     AC_DEFINE([SOLARIS25_PROC_VDB_BUG_FIXED], 1,
               [See the comment in gcconfig.h.])
     ;;
