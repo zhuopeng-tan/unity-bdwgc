@@ -24,6 +24,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #ifdef MSWINCE
 # ifndef WIN32_LEAN_AND_MEAN
@@ -152,13 +153,9 @@ GC_API void * GC_CALL GC_realloc(void * p, size_t lb)
 # ifdef REDIRECT_REALLOC
 
 /* As with malloc, avoid two levels of extra calls here.        */
-# ifdef GC_ADD_CALLER
-#   define RA GC_RETURN_ADDR,
-# else
-#   define RA
-# endif
+
 # define GC_debug_realloc_replacement(p, lb) \
-        GC_debug_realloc(p, lb, RA "unknown", 0)
+        GC_debug_realloc(p, lb, GC_DBG_RA "unknown", 0)
 
 #if 0
 void * realloc(void * p, size_t lb)
@@ -443,57 +440,6 @@ GC_API void * GC_CALL GC_malloc_many(size_t lb)
     return result;
 }
 
-/* Allocate lb bytes of pointerful, traced, but not collectable data */
-GC_API void * GC_CALL GC_malloc_uncollectable(size_t lb)
-{
-    void *op;
-    void **opp;
-    size_t lg;
-    DCL_LOCK_STATE;
-
-    if( SMALL_OBJ(lb) ) {
-        if (EXTRA_BYTES != 0 && lb != 0) lb--;
-                  /* We don't need the extra byte, since this won't be  */
-                  /* collected anyway.                                  */
-        lg = GC_size_map[lb];
-        opp = &(GC_uobjfreelist[lg]);
-        LOCK();
-        if( (op = *opp) != 0 ) {
-            *opp = obj_link(op);
-            obj_link(op) = 0;
-            GC_bytes_allocd += GRANULES_TO_BYTES(lg);
-            /* Mark bit ws already set on free list.  It will be        */
-            /* cleared only temporarily during a collection, as a       */
-            /* result of the normal free list mark bit clearing.        */
-            GC_non_gc_bytes += GRANULES_TO_BYTES(lg);
-            UNLOCK();
-        } else {
-            UNLOCK();
-            op = (ptr_t)GC_generic_malloc((word)lb, UNCOLLECTABLE);
-            /* For small objects, the free lists are completely marked. */
-        }
-        GC_ASSERT(0 == op || GC_is_marked(op));
-        return((void *) op);
-    } else {
-        hdr * hhdr;
-
-        op = (ptr_t)GC_generic_malloc((word)lb, UNCOLLECTABLE);
-        if (0 == op) return(0);
-
-        GC_ASSERT(((word)op & (HBLKSIZE - 1)) == 0); /* large block */
-        hhdr = HDR(op);
-        /* We don't need the lock here, since we have an undisguised    */
-        /* pointer.  We do need to hold the lock while we adjust        */
-        /* mark bits.                                                   */
-        LOCK();
-        set_mark_bit_from_hdr(hhdr, 0); /* Only object. */
-        GC_ASSERT(hhdr -> hb_n_marks == 0);
-        hhdr -> hb_n_marks = 1;
-        UNLOCK();
-        return((void *) op);
-    }
-}
-
 /* Not well tested nor integrated.      */
 /* Debug version is tricky and currently missing.       */
 #include <limits.h>
@@ -600,3 +546,62 @@ GC_API int GC_CALL GC_posix_memalign(void **memptr, size_t align, size_t lb)
     }
   }
 #endif /* ATOMIC_UNCOLLECTABLE */
+
+/* provide a version of strdup() that uses the collector to allocate the
+   copy of the string */
+GC_API char * GC_CALL GC_strdup(const char *s)
+{
+  char *copy;
+  size_t lb;
+  if (s == NULL) return NULL;
+  lb = strlen(s) + 1;
+  if ((copy = GC_malloc_atomic(lb)) == NULL) {
+#   ifndef MSWINCE
+      errno = ENOMEM;
+#   endif
+    return NULL;
+  }
+# ifndef MSWINCE
+    strcpy(copy, s);
+# else
+    /* strcpy() is deprecated in WinCE */
+    memcpy(copy, s, lb);
+# endif
+  return copy;
+}
+
+GC_API char * GC_CALL GC_strndup(const char *str, size_t size)
+{
+  char *copy;
+  size_t len = strlen(str); /* str is expected to be non-NULL  */
+  if (len > size)
+    len = size;
+  copy = GC_malloc_atomic(len + 1);
+  if (copy == NULL) {
+#   ifndef MSWINCE
+      errno = ENOMEM;
+#   endif
+    return NULL;
+  }
+  BCOPY(str, copy, len);
+  copy[len] = '\0';
+  return copy;
+}
+
+#ifdef GC_REQUIRE_WCSDUP
+# include <wchar.h> /* for wcslen() */
+
+  GC_API wchar_t * GC_CALL GC_wcsdup(const wchar_t *str)
+  {
+    size_t lb = (wcslen(str) + 1) * sizeof(wchar_t);
+    wchar_t *copy = GC_malloc_atomic(lb);
+    if (copy == NULL) {
+#     ifndef MSWINCE
+        errno = ENOMEM;
+#     endif
+      return NULL;
+    }
+    BCOPY(str, copy, lb);
+    return copy;
+  }
+#endif /* GC_REQUIRE_WCSDUP */

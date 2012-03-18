@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <setjmp.h>
 
-#if defined(OS2) || defined(CX_UX)
+#if defined(OS2) || defined(CX_UX) || defined(__CC_ARM)
 # define _setjmp(b) setjmp(b)
 # define _longjmp(b,v) longjmp(b,v)
 #endif
@@ -171,16 +171,6 @@ asm static void PushMacRegisters()
 # undef HAVE_PUSH_REGS
 #endif
 
-#if defined(UNIX_LIKE) && !defined(NO_GETCONTEXT) && \
-        (defined(DARWIN) || defined(HURD) || defined(OPENBSD) \
-         || defined(ARM32) || defined(MIPS) || defined(AVR32))
-# define NO_GETCONTEXT
-#endif
-
-#if defined(LINUX) && defined(SPARC) && !defined(NO_GETCONTEXT)
-# define NO_GETCONTEXT
-#endif
-
 #if !defined(HAVE_PUSH_REGS) && defined(UNIX_LIKE)
 # include <signal.h>
 # ifndef NO_GETCONTEXT
@@ -244,8 +234,9 @@ GC_INNER void GC_with_callee_saves_pushed(void (*fn)(ptr_t, void *),
         /* subsumed by the getcontext() call.                           */
         GC_save_regs_ret_val = GC_save_regs_in_stack();
 #     endif /* register windows. */
-#   elif defined(HAVE_BUILTIN_UNWIND_INIT) && \
-         !(defined(POWERPC) && defined(DARWIN))
+#   elif defined(HAVE_BUILTIN_UNWIND_INIT) \
+         && !(defined(POWERPC) && defined(DARWIN)) \
+         && !(defined(I386) && defined(RTEMS))
       /* This was suggested by Richard Henderson as the way to  */
       /* force callee-save registers and register windows onto  */
       /* the stack.                                             */
@@ -267,8 +258,8 @@ GC_INNER void GC_with_callee_saves_pushed(void (*fn)(ptr_t, void *),
         for (; (char *)i < lim; i++) {
             *i = 0;
         }
-#       if defined(MSWIN32) || defined(MSWINCE) \
-                  || defined(UTS4) || defined(LINUX) || defined(EWS4800)
+#       if defined(MSWIN32) || defined(MSWINCE) || defined(UTS4) \
+           || defined(LINUX) || defined(EWS4800) || defined(RTEMS)
           (void) setjmp(regs);
 #       else
           (void) _setjmp(regs);

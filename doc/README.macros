@@ -81,23 +81,32 @@ GC_REQUIRE_WCSDUP       Force GC to export GC_wcsdup() (the Unicode version
 
 
 These define arguments influence the collector configuration:
-FIND_LEAK causes GC_find_leak to be initially set.
-  This causes the collector to assume that all inaccessible
-  objects should have been explicitly deallocated, and reports exceptions.
-  Finalization and the test program are not usable in this mode.
+
+FIND_LEAK       Causes GC_find_leak to be initially set.  This causes the
+  collector to assume that all inaccessible objects should have been
+  explicitly deallocated, and reports exceptions.  Finalization and the test
+  program are not usable in this mode.
+
+GC_FINDLEAK_DELAY_FREE  Turns on deferred freeing of objects in the
+  leak-finding mode letting the collector to detect alter-object-after-free
+  errors as well as detect leaked objects sooner (instead of only when program
+  terminates).  Has no effect if SHORT_DBG_HDRS.
+
+GC_ABORT_ON_LEAK        Causes the application to be terminated once leaked or
+  smashed (corrupted on use-after-free) objects are found (after printing the
+  information about that objects).
 
 SUNOS5SIGS      Solaris-like signal handling.  This is probably misnamed,
-                since it really doesn't guarantee much more than Posix.
-                Currently set only for Solaris2.X, HPUX, and DRSNX.  Should
-                probably be set for some other platforms.
+  since it really doesn't guarantee much more than POSIX.  Currently set only
+  for Solaris2.X, HPUX, and DRSNX.  Should probably be set for some other
+  platforms.
 
-PCR             Set if the collector is being built as part of the Xerox
-                Portable Common Runtime.
+PCR     Set if the collector is being built as part of the Xerox Portable
+  Common Runtime.
 
-USE_COMPILER_TLS  Assume the existence of __thread-style thread-local
-                storage.  Set automatically for thread-local allocation with
-                the HP/UX vendor compiler.  Usable with gcc on sufficiently
-                up-to-date ELF platforms.
+USE_COMPILER_TLS  Assume the existence of __thread-style thread-local storage.
+  Set automatically for thread-local allocation with the HP/UX vendor
+  compiler.  Usable with gcc on sufficiently up-to-date ELF platforms.
 
 IMPORTANT: Any of the _THREADS options must normally also be defined in
   the client before including gc.h.  This redefines thread primitives to
@@ -416,6 +425,10 @@ MAKE_BACK_GRAPH         Enable GC_PRINT_BACK_HEIGHT environment variable.
   support.  Implies DBG_HDRS_ALL.  All allocation should be done using
   the debug interface.
 
+GC_PRINT_BACK_HEIGHT    Permanently turn on back-height printing mode
+  (useful when NO_GETENV).  See the similar environment variable description
+  in README.environment.  Requires MAKE_BACK_GRAPH defined.
+
 STUBBORN_ALLOC  Allows allocation of "hard to change" objects, and thus
   makes incremental collection easier.  Was enabled by default until 6.0.
   Rarely used, to my knowledge.
@@ -493,14 +506,19 @@ DONT_USE_USER32_DLL (Win32 only)        Don't use "user32" DLL import library
   (containing MessageBox() entry); useful for a static GC library.
 
 GC_PREFER_MPROTECT_VDB  Choose MPROTECT_VDB manually in case of multiple
-  virtual dirty bit strategies are implemented (at present useful on Win32
-  to force MPROTECT_VDB strategy instead of the default GWW_VDB one).
+  virtual dirty bit strategies are implemented (at present useful on Win32 and
+  Solaris to force MPROTECT_VDB strategy instead of the default GWW_VDB or
+  PROC_VDB ones).
 
 GC_IGNORE_GCJ_INFO      Disable GCJ-style type information (useful for
   debugging on WinCE).
 
 GC_PRINT_VERBOSE_STATS  Permanently turn on verbose logging (useful for
   debugging and profiling on WinCE).
+
+GC_ONLY_LOG_TO_FILE     Don't redirect GC stdout and stderr to the log file
+  specified by GC_LOG_FILE environment variable.  Has effect only when the
+  variable is set (to anything other than "0").
 
 GC_DONT_EXPAND  Don't expand the heap unless explicitly requested or forced to.
 
@@ -539,6 +557,6 @@ PLATFORM_ANDROID        Compile for Android NDK platform.
 SN_TARGET_PS3           Compile for Sony PS/3.
 
 USE_GET_STACKBASE_FOR_MAIN (Linux only)  Use pthread_attr_getstack() instead
-of __libc_stack_end (or instead of any hard-coded value) for getting the
-primordial thread stack base (useful if the client modifies the program's
-address space).
+  of __libc_stack_end (or instead of any hard-coded value) for getting the
+  primordial thread stack base (useful if the client modifies the program's
+  address space).

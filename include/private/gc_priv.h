@@ -29,7 +29,7 @@
 #if (defined(__linux__) || defined(__GLIBC__) || defined(__GNU__)) \
     && !defined(_GNU_SOURCE)
   /* Can't test LINUX, since this must be defined before other includes. */
-# define _GNU_SOURCE
+# define _GNU_SOURCE 1
 #endif
 
 #if (defined(DGUX) && defined(GC_THREADS) || defined(DGUX386_THREADS) \
@@ -43,7 +43,6 @@
 # endif
 
 #ifndef GC_H
-# define GC_I_HIDE_POINTERS /* to get GC_HIDE_POINTER() and friends */
 # include "../gc.h"
 #endif
 
@@ -171,6 +170,8 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 #ifndef GC_LOCKS_H
 # include "gc_locks.h"
 #endif
+
+#define ONES ((word)(signed_word)(-1))
 
 # ifdef STACK_GROWS_DOWN
 #   define COOLER_THAN >
@@ -310,51 +311,54 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 /*********************************/
 
 #ifdef BSD_TIME
-#   undef CLOCK_TYPE
-#   undef GET_TIME
-#   undef MS_TIME_DIFF
-#   define CLOCK_TYPE struct timeval
-#   define GET_TIME(x) { struct rusage rusage; \
-                         getrusage (RUSAGE_SELF,  &rusage); \
-                         x = rusage.ru_utime; }
-#   define MS_TIME_DIFF(a,b) \
-                ((unsigned long)((double) (a.tv_sec - b.tv_sec) * 1000.0 \
-                               + (double) (a.tv_usec - b.tv_usec) / 1000.0))
-#else /* !BSD_TIME */
-# if defined(MSWIN32) || defined(MSWINCE)
-#   include <windows.h>
-#   include <winbase.h>
-#   define CLOCK_TYPE DWORD
-#   define GET_TIME(x) x = GetTickCount()
-#   define MS_TIME_DIFF(a,b) ((long)((a)-(b)))
-# else /* !MSWIN32, !MSWINCE, !BSD_TIME */
-#   include <time.h>
-#   if !defined(__STDC__) && defined(SPARC) && defined(SUNOS4)
-      clock_t clock(void);      /* Not in time.h, where it belongs      */
-#   endif
-#   if defined(FREEBSD) && !defined(CLOCKS_PER_SEC)
-#     include <machine/limits.h>
-#     define CLOCKS_PER_SEC CLK_TCK
-#   endif
-#   if !defined(CLOCKS_PER_SEC)
-#     define CLOCKS_PER_SEC 1000000
-/*
- * This is technically a bug in the implementation.  ANSI requires that
- * CLOCKS_PER_SEC be defined.  But at least under SunOS4.1.1, it isn't.
- * Also note that the combination of ANSI C and POSIX is incredibly gross
- * here. The type clock_t is used by both clock() and times().  But on
- * some machines these use different notions of a clock tick, CLOCKS_PER_SEC
- * seems to apply only to clock.  Hence we use it here.  On many machines,
- * including SunOS, clock actually uses units of microseconds (which are
- * not really clock ticks).
- */
-#   endif
-#   define CLOCK_TYPE clock_t
-#   define GET_TIME(x) x = clock()
-#   define MS_TIME_DIFF(a,b) ((unsigned long) \
-                (1000.0*(double)((a)-(b))/(double)CLOCKS_PER_SEC))
-# endif /* !MSWIN32 */
-#endif /* !BSD_TIME */
+# undef CLOCK_TYPE
+# undef GET_TIME
+# undef MS_TIME_DIFF
+# define CLOCK_TYPE struct timeval
+# define GET_TIME(x) { struct rusage rusage; \
+                       getrusage (RUSAGE_SELF,  &rusage); \
+                       x = rusage.ru_utime; }
+# define MS_TIME_DIFF(a,b) ((unsigned long)(a.tv_sec - b.tv_sec) * 1000 \
+                            + (unsigned long)(a.tv_usec - b.tv_usec) / 1000)
+#elif defined(MSWIN32) || defined(MSWINCE)
+# ifndef WIN32_LEAN_AND_MEAN
+#   define WIN32_LEAN_AND_MEAN 1
+# endif
+# define NOSERVICE
+# include <windows.h>
+# include <winbase.h>
+# define CLOCK_TYPE DWORD
+# define GET_TIME(x) x = GetTickCount()
+# define MS_TIME_DIFF(a,b) ((long)((a)-(b)))
+#else /* !MSWIN32, !MSWINCE, !BSD_TIME */
+# include <time.h>
+# if !defined(__STDC__) && defined(SPARC) && defined(SUNOS4)
+    clock_t clock(void);        /* Not in time.h, where it belongs      */
+# endif
+# if defined(FREEBSD) && !defined(CLOCKS_PER_SEC)
+#   include <machine/limits.h>
+#   define CLOCKS_PER_SEC CLK_TCK
+# endif
+# if !defined(CLOCKS_PER_SEC)
+#   define CLOCKS_PER_SEC 1000000
+    /* This is technically a bug in the implementation.                 */
+    /* ANSI requires that CLOCKS_PER_SEC be defined.  But at least      */
+    /* under SunOS 4.1.1, it isn't.  Also note that the combination of  */
+    /* ANSI C and POSIX is incredibly gross here.  The type clock_t     */
+    /* is used by both clock() and times().  But on some machines       */
+    /* these use different notions of a clock tick, CLOCKS_PER_SEC      */
+    /* seems to apply only to clock.  Hence we use it here.  On many    */
+    /* machines, including SunOS, clock actually uses units of          */
+    /* microseconds (which are not really clock ticks).                 */
+# endif
+# define CLOCK_TYPE clock_t
+# define GET_TIME(x) x = clock()
+# define MS_TIME_DIFF(a,b) (CLOCKS_PER_SEC % 1000 == 0 ? \
+        (unsigned long)((a) - (b)) / (unsigned long)(CLOCKS_PER_SEC / 1000) \
+        : ((unsigned long)((a) - (b)) * 1000) / (unsigned long)CLOCKS_PER_SEC)
+  /* Avoid using double type since some targets (like ARM) might        */
+  /* require -lm option for double-to-long conversion.                  */
+#endif /* !BSD_TIME && !MSWIN32 */
 
 /* We use bzero and bcopy internally.  They may not be available.       */
 # if defined(SPARC) && defined(SUNOS4)
@@ -399,7 +403,7 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 #     define START_WORLD() \
         PCR_ThCtl_SetExclusiveMode(PCR_ThCtl_ExclusiveMode_null, \
                                    PCR_allSigsBlocked, \
-                                   PCR_waitForever);
+                                   PCR_waitForever)
 # else
 #   if defined(GC_WIN32_THREADS) || defined(GC_PTHREADS)
       GC_INNER void GC_stop_world(void);
@@ -427,7 +431,7 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 #     define DebugBreak() _exit(-1) /* there is no abort() in WinCE */
 #   endif
 #   ifdef SMALL_CONFIG
-#       if defined(MSWIN32) || defined(MSWINCE)
+#       if (defined(MSWIN32) && !defined(LINT2)) || defined(MSWINCE)
 #           define ABORT(msg) DebugBreak()
 #       else
 #           define ABORT(msg) abort()
@@ -579,7 +583,6 @@ GC_EXTERN GC_warn_proc GC_current_warn_proc;
 #define WORDSZ ((word)CPP_WORDSZ)
 #define SIGNB  ((word)1 << (WORDSZ-1))
 #define BYTES_PER_WORD      ((word)(sizeof (word)))
-#define ONES                ((word)(signed_word)(-1))
 #define divWORDSZ(n) ((n) >> LOGWL)     /* divide n by size of word */
 
 #if GRANULE_BYTES == 8
@@ -768,17 +771,6 @@ typedef word page_hash_table[PHT_SIZE];
            /* initial group of mark bits, and it is safe     */
            /* to allocate smaller header for large objects.  */
 
-# ifdef USE_MARK_BYTES
-#   define MARK_BITS_SZ (MARK_BITS_PER_HBLK + 1)
-        /* Unlike the other case, this is in units of bytes.            */
-        /* Since we force doubleword alignment, we need at most one     */
-        /* mark bit per 2 words.  But we do allocate and set one        */
-        /* extra mark bit to avoid an explicit check for the            */
-        /* partial object at the end of each block.                     */
-# else
-#   define MARK_BITS_SZ (MARK_BITS_PER_HBLK/CPP_WORDSZ + 1)
-# endif
-
 #ifdef PARALLEL_MARK
 # include "atomic_ops.h"
   typedef AO_t counter_t;
@@ -787,7 +779,7 @@ typedef word page_hash_table[PHT_SIZE];
 # if defined(THREADS) && defined(MPROTECT_VDB)
 #   include "atomic_ops.h"
 # endif
-#endif
+#endif /* !PARALLEL_MARK */
 
 /* We maintain layout maps for heap blocks containing objects of a given */
 /* size.  Each entry in this map describes a byte offset and has the     */
@@ -860,6 +852,12 @@ struct hblkhdr {
                                 /* Without parallel marking, the count  */
                                 /* is accurate.                         */
 #   ifdef USE_MARK_BYTES
+#     define MARK_BITS_SZ (MARK_BITS_PER_HBLK + 1)
+        /* Unlike the other case, this is in units of bytes.            */
+        /* Since we force double-word alignment, we need at most one    */
+        /* mark bit per 2 words.  But we do allocate and set one        */
+        /* extra mark bit to avoid an explicit check for the            */
+        /* partial object at the end of each block.                     */
       union {
         char _hb_marks[MARK_BITS_SZ];
                             /* The i'th byte is 1 if the object         */
@@ -872,6 +870,7 @@ struct hblkhdr {
       } _mark_byte_union;
 #     define hb_marks _mark_byte_union._hb_marks
 #   else
+#     define MARK_BITS_SZ (MARK_BITS_PER_HBLK/CPP_WORDSZ + 1)
       word hb_marks[MARK_BITS_SZ];
 #   endif /* !USE_MARK_BYTES */
 };
@@ -953,7 +952,7 @@ struct roots {
 #   else
 #     define MAX_HEAP_SECTS 768         /* Separately added heap sections. */
 #   endif
-# elif defined(SMALL_CONFIG)
+# elif defined(SMALL_CONFIG) && !defined(USE_PROC_FOR_LIBRARIES)
 #   define MAX_HEAP_SECTS 128           /* Roughly 256MB (128*2048*1K)  */
 # elif CPP_WORDSZ > 32
 #   define MAX_HEAP_SECTS 1024          /* Roughly 8GB                  */
@@ -1268,7 +1267,9 @@ GC_EXTERN word GC_page_size;
 #if defined(MSWIN32) || defined(MSWINCE) || defined(CYGWIN32)
   struct _SYSTEM_INFO;
   GC_EXTERN struct _SYSTEM_INFO GC_sysinfo;
+  GC_INNER GC_bool GC_is_heap_base(ptr_t p);
 #endif
+
 
 GC_EXTERN word GC_black_list_spacing;
                         /* Average number of bytes between blacklisted  */
@@ -1335,15 +1336,6 @@ struct GC_traced_stack_sect_s {
 /*  with it. Only those corresponding to the beginning of an */
 /*  object are used.                                         */
 
-/* Set mark bit correctly, even if mark bits may be concurrently        */
-/* accessed.                                                            */
-#ifdef PARALLEL_MARK
-# define OR_WORD(addr, bits) \
-        { AO_or((volatile AO_t *)(addr), (AO_t)bits); }
-#else
-# define OR_WORD(addr, bits) *(addr) |= (bits)
-#endif
-
 /* Mark bit operations */
 
 /*
@@ -1355,16 +1347,23 @@ struct GC_traced_stack_sect_s {
 
 #ifdef USE_MARK_BYTES
 # define mark_bit_from_hdr(hhdr,n) ((hhdr)->hb_marks[n])
-# define set_mark_bit_from_hdr(hhdr,n) ((hhdr)->hb_marks[n]) = 1
-# define clear_mark_bit_from_hdr(hhdr,n) ((hhdr)->hb_marks[n]) = 0
-#else /* !USE_MARK_BYTES */
-# define mark_bit_from_hdr(hhdr,n) (((hhdr)->hb_marks[divWORDSZ(n)] \
-                            >> (modWORDSZ(n))) & (word)1)
+# define set_mark_bit_from_hdr(hhdr,n) ((hhdr)->hb_marks[n] = 1)
+# define clear_mark_bit_from_hdr(hhdr,n) ((hhdr)->hb_marks[n] = 0)
+#else
+/* Set mark bit correctly, even if mark bits may be concurrently        */
+/* accessed.                                                            */
+# ifdef PARALLEL_MARK
+    /* This is used only if we explicitly set USE_MARK_BITS.    */
+#   define OR_WORD(addr, bits) AO_or((volatile AO_t *)(addr), (AO_t)(bits))
+# else
+#   define OR_WORD(addr, bits) (void)(*(addr) |= (bits))
+# endif
+# define mark_bit_from_hdr(hhdr,n) \
+              (((hhdr)->hb_marks[divWORDSZ(n)] >> modWORDSZ(n)) & (word)1)
 # define set_mark_bit_from_hdr(hhdr,n) \
-                            OR_WORD((hhdr)->hb_marks+divWORDSZ(n), \
-                                    (word)1 << modWORDSZ(n))
-# define clear_mark_bit_from_hdr(hhdr,n) (hhdr)->hb_marks[divWORDSZ(n)] \
-                                &= ~((word)1 << modWORDSZ(n))
+              OR_WORD((hhdr)->hb_marks+divWORDSZ(n), (word)1 << modWORDSZ(n))
+# define clear_mark_bit_from_hdr(hhdr,n) \
+              ((hhdr)->hb_marks[divWORDSZ(n)] &= ~((word)1 << modWORDSZ(n)))
 #endif /* !USE_MARK_BYTES */
 
 #ifdef MARK_BIT_PER_OBJ
@@ -1381,8 +1380,8 @@ struct GC_traced_stack_sect_s {
 #  define MARK_BIT_OFFSET(sz) BYTES_TO_GRANULES(sz)
 #  define IF_PER_OBJ(x)
 #  define FINAL_MARK_BIT(sz) \
-        ((sz) > MAXOBJBYTES? MARK_BITS_PER_HBLK \
-                        : BYTES_TO_GRANULES((sz) * HBLK_OBJS(sz)))
+                ((sz) > MAXOBJBYTES ? MARK_BITS_PER_HBLK \
+                                : BYTES_TO_GRANULES((sz) * HBLK_OBJS(sz)))
 #endif
 
 /* Important internal collector routines */
@@ -1628,7 +1627,7 @@ GC_INNER void GC_freehblk(struct hblk * p);
 
 /*  Misc GC: */
 GC_INNER GC_bool GC_expand_hp_inner(word n);
-GC_INNER void GC_start_reclaim(int abort_if_found);
+GC_INNER void GC_start_reclaim(GC_bool abort_if_found);
                                 /* Restore unmarked objects to free     */
                                 /* lists, or (if abort_if_found is      */
                                 /* TRUE) report them.                   */
@@ -1709,6 +1708,12 @@ GC_INNER ptr_t GC_allocobj(size_t sz, int kind);
 GC_INNER void * GC_clear_stack(void *);
                                 /* in misc.c, behaves like identity.    */
 
+#ifdef GC_ADD_CALLER
+# define GC_DBG_RA GC_RETURN_ADDR,
+#else
+# define GC_DBG_RA /* empty */
+#endif
+
 /* We make the GC_clear_stack() call a tail one, hoping to get more of  */
 /* the stack.                                                           */
 #define GENERAL_MALLOC(lb,k) \
@@ -1786,9 +1791,18 @@ GC_EXTERN void (*GC_print_heap_obj)(ptr_t p);
                         /* Print an address map of the process.         */
 #endif
 
+#ifndef SHORT_DBG_HDRS
+  GC_EXTERN GC_bool GC_findleak_delay_free;
+                        /* Do not immediately deallocate object on      */
+                        /* free() in the leak-finding mode, just mark   */
+                        /* it as freed (and deallocate it after GC).    */
+  GC_INNER GC_bool GC_check_leaked(ptr_t base); /* from dbg_mlc.c */
+#endif
+
 GC_EXTERN GC_bool GC_have_errors; /* We saw a smashed or leaked object. */
                                   /* Call error printing routine        */
-                                  /* occasionally.                      */
+                                  /* occasionally.  It is ok to read it */
+                                  /* without acquiring the lock.        */
 
 #ifndef SMALL_CONFIG
   /* GC_print_stats should be visible outside the GC in some cases.     */
@@ -1804,9 +1818,9 @@ GC_EXTERN GC_bool GC_have_errors; /* We saw a smashed or leaked object. */
 #ifndef NO_DEBUGGING
   GC_EXTERN GC_bool GC_dump_regularly;
                                 /* Generate regular debugging dumps.    */
-# define COND_DUMP if (GC_dump_regularly) GC_dump();
+# define COND_DUMP if (GC_dump_regularly) GC_dump()
 #else
-# define COND_DUMP
+# define COND_DUMP /* empty */
 #endif
 
 #ifdef KEEP_BACK_PTRS
@@ -1915,7 +1929,7 @@ void GC_print_static_roots(void);
 #endif
 
 /* Make arguments appear live to compiler */
-#if defined(__BORLANDC__) || defined(__WATCOMC__)
+#if defined(__BORLANDC__) || defined(__WATCOMC__) || defined(__CC_ARM)
   void GC_noop(void*, ...);
 #else
 # ifdef __DMC__
@@ -1950,12 +1964,6 @@ GC_API_PRIV void GC_log_printf(const char * format, ...)
 void GC_err_puts(const char *s);
                         /* Write s to stderr, don't buffer, don't add   */
                         /* newlines, don't ...                          */
-
-#if defined(LINUX) && !defined(SMALL_CONFIG)
-  GC_INNER void GC_err_write(const char *buf, size_t len);
-                        /* Write buf to stderr, don't buffer, don't add */
-                        /* newlines, don't ...                          */
-#endif
 
 GC_EXTERN unsigned GC_fail_count;
                         /* How many consecutive GC/expansion failures?  */
@@ -2003,18 +2011,121 @@ GC_EXTERN signed_word GC_bytes_found;
 
 #ifdef THREAD_LOCAL_ALLOC
   GC_EXTERN GC_bool GC_world_stopped; /* defined in alloc.c */
+  GC_INNER void GC_mark_thread_local_free_lists(void);
 #endif
 
 #ifdef GC_GCJ_SUPPORT
-  GC_EXTERN GC_bool GC_gcj_malloc_initialized; /* defined in gcj_mlc.c */
+# ifdef GC_ASSERTIONS
+    GC_EXTERN GC_bool GC_gcj_malloc_initialized; /* defined in gcj_mlc.c */
+# endif
   GC_EXTERN ptr_t * GC_gcjobjfreelist;
+#endif
+
+#if defined(GWW_VDB) && defined(MPROTECT_VDB)
+  GC_INNER GC_bool GC_gww_dirty_init(void);
+  /* Defined in os_dep.c.  Returns TRUE if GetWriteWatch is available.  */
+  /* May be called repeatedly.                                          */
+#endif
+
+#if defined(CHECKSUMS) || defined(PROC_VDB)
+  GC_INNER GC_bool GC_page_was_ever_dirty(struct hblk * h);
+                        /* Could the page contain valid heap pointers?  */
+#endif
+
+GC_INNER void GC_default_print_heap_obj_proc(ptr_t p);
+
+GC_INNER void GC_extend_size_map(size_t); /* in misc.c */
+
+GC_INNER void GC_setpagesize(void);
+
+GC_INNER void GC_initialize_offsets(void);      /* defined in obj_map.c */
+
+GC_INNER void GC_bl_init(void);
+GC_INNER void GC_bl_init_no_interiors(void);    /* defined in blacklst.c */
+
+GC_INNER void GC_start_debugging(void); /* defined in dbg_mlc.c */
+
+/* Store debugging info into p.  Return displaced pointer.      */
+/* Assumes we don't hold allocation lock.                       */
+GC_INNER ptr_t GC_store_debug_info(ptr_t p, word sz, const char *str,
+                                   int linenum);
+
+#ifdef REDIRECT_MALLOC
+# ifdef GC_LINUX_THREADS
+    GC_INNER GC_bool GC_text_mapping(char *nm, ptr_t *startp, ptr_t *endp);
+                                                /* from os_dep.c */
+# endif
+#elif defined(MSWIN32) || defined(MSWINCE)
+  GC_INNER void GC_add_current_malloc_heap(void);
+#endif /* !REDIRECT_MALLOC */
+
+#ifdef MAKE_BACK_GRAPH
+  GC_INNER void GC_build_back_graph(void);
+  GC_INNER void GC_traverse_back_graph(void);
+#endif
+
+#ifdef MSWIN32
+  GC_INNER void GC_init_win32(void);
+#endif
+
+#if !defined(MSWIN32) && !defined(MSWINCE) && !defined(CYGWIN32)
+  GC_INNER void * GC_roots_present(ptr_t);
+        /* The type is a lie, since the real type doesn't make sense here, */
+        /* and we only test for NULL.                                      */
+#endif
+
+#ifdef GC_WIN32_THREADS
+  GC_INNER void GC_get_next_stack(char *start, char * limit, char **lo,
+                                  char **hi);
+# ifdef MPROTECT_VDB
+    GC_INNER void GC_set_write_fault_handler(void);
+# endif
+#endif /* GC_WIN32_THREADS */
+
+#ifdef THREADS
+  GC_INNER void GC_reset_finalizer_nested(void);
+  GC_INNER unsigned char *GC_check_finalizer_nested(void);
+  GC_INNER void GC_do_blocking_inner(ptr_t data, void * context);
+  GC_INNER void GC_push_all_stacks(void);
+# ifdef USE_PROC_FOR_LIBRARIES
+    GC_INNER GC_bool GC_segment_is_thread_stack(ptr_t lo, ptr_t hi);
+# endif
+# ifdef IA64
+    GC_INNER ptr_t GC_greatest_stack_base_below(ptr_t bound);
+# endif
+#endif /* THREADS */
+
+#ifdef DYNAMIC_LOADING
+  GC_INNER GC_bool GC_register_main_static_data(void);
+# ifdef DARWIN
+    GC_INNER void GC_init_dyld(void);
+# endif
+#endif /* DYNAMIC_LOADING */
+
+#ifdef SEARCH_FOR_DATA_START
+  GC_INNER void GC_init_linux_data_start(void);
+#endif
+
+#if defined(NETBSD) && defined(__ELF__)
+  GC_INNER void GC_init_netbsd_elf(void);
+#endif
+
+#ifdef UNIX_LIKE
+  GC_INNER void GC_set_and_save_fault_handler(void (*handler)(int));
+#endif
+
+#ifdef NEED_PROC_MAPS
+  GC_INNER char *GC_parse_map_entry(char *buf_ptr, ptr_t *start, ptr_t *end,
+                                    char **prot, unsigned int *maj_dev,
+                                    char **mapping_name);
+  GC_INNER char *GC_get_maps(void); /* from os_dep.c */
 #endif
 
 #ifdef GC_ASSERTIONS
 #  define GC_ASSERT(expr) \
                 if (!(expr)) { \
-                  GC_err_printf("Assertion failure: %s:%ld\n", \
-                                __FILE__, (unsigned long)__LINE__); \
+                  GC_err_printf("Assertion failure: %s:%d\n", \
+                                __FILE__, __LINE__); \
                   ABORT("assertion failure"); \
                 }
 #else
@@ -2096,13 +2207,17 @@ GC_EXTERN signed_word GC_bytes_found;
 # endif
 #endif /* GC_PTHREADS && !SIG_SUSPEND */
 
+#if defined(GC_PTHREADS) && !defined(GC_SEM_INIT_PSHARED)
+# define GC_SEM_INIT_PSHARED 0
+#endif
+
 /* Some macros for setjmp that works across signal handlers     */
 /* were possible, and a couple of routines to facilitate        */
 /* catching accesses to bad addresses when that's               */
 /* possible/needed.                                             */
 #if defined(UNIX_LIKE) || (defined(NEED_FIND_LIMIT) && defined(CYGWIN32))
 # include <setjmp.h>
-# if defined(SUNOS5SIGS) && !defined(FREEBSD)
+# if defined(SUNOS5SIGS) && !defined(FREEBSD) && !defined(LINUX)
 #  include <sys/siginfo.h>
 # endif
   /* Define SETJMP and friends to be the version that restores  */

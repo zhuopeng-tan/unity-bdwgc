@@ -39,7 +39,12 @@
 #include "gc_gcj.h"
 #include "private/dbg_mlc.h"
 
-GC_INNER GC_bool GC_gcj_malloc_initialized = FALSE;
+#ifdef GC_ASSERTIONS
+  GC_INNER /* variable is also used in thread_local_alloc.c */
+#else
+  STATIC
+#endif
+GC_bool GC_gcj_malloc_initialized = FALSE;
 
 int GC_gcj_kind = 0;    /* Object kind for objects with descriptors     */
                         /* in "vtable".                                 */
@@ -199,8 +204,6 @@ static void maybe_finalize(void)
     return((void *) op);
 }
 
-GC_INNER void GC_start_debugging(void);
-
 /* Similar to GC_gcj_malloc, but add debug info.  This is allocated     */
 /* with GC_gcj_debug_kind.                                              */
 GC_API void * GC_CALL GC_debug_gcj_malloc(size_t lb,
@@ -209,7 +212,7 @@ GC_API void * GC_CALL GC_debug_gcj_malloc(size_t lb,
     void * result;
     DCL_LOCK_STATE;
 
-    /* We're careful to avoid extra calls, which could           */
+    /* We're careful to avoid extra calls, which could          */
     /* confuse the backtrace.                                   */
     LOCK();
     maybe_finalize();
@@ -229,7 +232,7 @@ GC_API void * GC_CALL GC_debug_gcj_malloc(size_t lb,
         GC_start_debugging();
     }
     ADD_CALL_CHAIN(result, ra);
-    return (GC_store_debug_info(result, (word)lb, s, (word)i));
+    return (GC_store_debug_info(result, (word)lb, s, i));
 }
 
 /* There is no THREAD_LOCAL_ALLOC for GC_gcj_malloc_ignore_off_page().  */

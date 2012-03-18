@@ -17,11 +17,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#ifndef MSWINCE
-# include <errno.h>
-#endif
-
-GC_INNER void GC_extend_size_map(size_t); /* in misc.c */
 
 /* Allocate reclaim list for kind:      */
 /* Return TRUE on success               */
@@ -232,65 +227,6 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
    }
 }
 
-/* provide a version of strdup() that uses the collector to allocate the
-   copy of the string */
-GC_API char * GC_CALL GC_strdup(const char *s)
-{
-  char *copy;
-  size_t lb;
-  if (s == NULL) return NULL;
-  lb = strlen(s) + 1;
-  if ((copy = GC_malloc_atomic(lb)) == NULL) {
-#   ifndef MSWINCE
-      errno = ENOMEM;
-#   endif
-    return NULL;
-  }
-# ifndef MSWINCE
-    strcpy(copy, s);
-# else
-    /* strcpy() is deprecated in WinCE */
-    memcpy(copy, s, lb);
-# endif
-  return copy;
-}
-
-GC_API char * GC_CALL GC_strndup(const char *str, size_t size)
-{
-  char *copy;
-  size_t len = strlen(str); /* str is expected to be non-NULL  */
-  if (len > size)
-    len = size;
-  copy = GC_malloc_atomic(len + 1);
-  if (copy == NULL) {
-#   ifndef MSWINCE
-      errno = ENOMEM;
-#   endif
-    return NULL;
-  }
-  BCOPY(str, copy, len);
-  copy[len] = '\0';
-  return copy;
-}
-
-#ifdef GC_REQUIRE_WCSDUP
-# include <wchar.h> /* for wcslen() */
-
-  GC_API wchar_t * GC_CALL GC_wcsdup(const wchar_t *str)
-  {
-    size_t lb = (wcslen(str) + 1) * sizeof(wchar_t);
-    wchar_t *copy = GC_malloc_atomic(lb);
-    if (copy == NULL) {
-#     ifndef MSWINCE
-        errno = ENOMEM;
-#     endif
-      return NULL;
-    }
-    BCOPY(str, copy, lb);
-    return copy;
-  }
-#endif /* GC_REQUIRE_WCSDUP */
-
 /* Allocate lb bytes of composite (pointerful) data */
 #ifdef THREAD_LOCAL_ALLOC
   GC_INNER void * GC_core_malloc(size_t lb)
@@ -326,19 +262,70 @@ GC_API char * GC_CALL GC_strndup(const char *str, size_t size)
    }
 }
 
-# ifdef REDIRECT_MALLOC
+/* Allocate lb bytes of pointerful, traced, but not collectable data */
+GC_API void * GC_CALL GC_malloc_uncollectable(size_t lb)
+{
+    void *op;
+    void **opp;
+    size_t lg;
+    DCL_LOCK_STATE;
+
+    if( SMALL_OBJ(lb) ) {
+        if (EXTRA_BYTES != 0 && lb != 0) lb--;
+                  /* We don't need the extra byte, since this won't be  */
+                  /* collected anyway.                                  */
+        lg = GC_size_map[lb];
+        opp = &(GC_uobjfreelist[lg]);
+        LOCK();
+        if( (op = *opp) != 0 ) {
+            *opp = obj_link(op);
+            obj_link(op) = 0;
+            GC_bytes_allocd += GRANULES_TO_BYTES(lg);
+            /* Mark bit ws already set on free list.  It will be        */
+            /* cleared only temporarily during a collection, as a       */
+            /* result of the normal free list mark bit clearing.        */
+            GC_non_gc_bytes += GRANULES_TO_BYTES(lg);
+            UNLOCK();
+        } else {
+            UNLOCK();
+            op = (ptr_t)GC_generic_malloc((word)lb, UNCOLLECTABLE);
+            /* For small objects, the free lists are completely marked. */
+        }
+        GC_ASSERT(0 == op || GC_is_marked(op));
+        return((void *) op);
+    } else {
+        hdr * hhdr;
+
+        op = (ptr_t)GC_generic_malloc((word)lb, UNCOLLECTABLE);
+        if (0 == op) return(0);
+
+        GC_ASSERT(((word)op & (HBLKSIZE - 1)) == 0); /* large block */
+        hhdr = HDR(op);
+        /* We don't need the lock here, since we have an undisguised    */
+        /* pointer.  We do need to hold the lock while we adjust        */
+        /* mark bits.                                                   */
+        LOCK();
+        set_mark_bit_from_hdr(hhdr, 0); /* Only object. */
+        GC_ASSERT(hhdr -> hb_n_marks == 0);
+        hhdr -> hb_n_marks = 1;
+        UNLOCK();
+        return((void *) op);
+    }
+}
+
+#ifdef REDIRECT_MALLOC
+
+# ifndef MSWINCE
+#  include <errno.h>
+# endif
 
 /* Avoid unnecessary nested procedure calls here, by #defining some     */
 /* malloc replacements.  Otherwise we end up saving a                   */
 /* meaningless return address in the object.  It also speeds things up, */
 /* but it is admittedly quite ugly.                                     */
-# ifdef GC_ADD_CALLER
-#   define RA GC_RETURN_ADDR,
-# else
-#   define RA
-# endif
+
 # define GC_debug_malloc_replacement(lb) \
-                        GC_debug_malloc(lb, RA "unknown", 0)
+                        GC_debug_malloc(lb, GC_DBG_RA "unknown", 0)
 
 #if 0
 void * malloc(size_t lb)
@@ -365,12 +352,11 @@ void * malloc(size_t lb)
   STATIC ptr_t GC_libpthread_end = 0;
   STATIC ptr_t GC_libld_start = 0;
   STATIC ptr_t GC_libld_end = 0;
-  GC_INNER GC_bool GC_text_mapping(char *nm, ptr_t *startp, ptr_t *endp);
-                                                /* From os_dep.c */
 
   STATIC void GC_init_lib_bounds(void)
   {
     if (GC_libpthread_start != 0) return;
+    GC_init(); /* if not called yet */
     if (!GC_text_mapping("libpthread-",
                          &GC_libpthread_start, &GC_libpthread_end)) {
         WARN("Failed to find libpthread.so text mapping: Expect crash\n", 0);
@@ -383,7 +369,7 @@ void * malloc(size_t lb)
         WARN("Failed to find ld.so text mapping: Expect crash\n", 0);
     }
   }
-#endif
+#endif /* GC_LINUX_THREADS */
 
 #if 0
 void * calloc(size_t n, size_t lb)
@@ -400,7 +386,7 @@ void * calloc(size_t n, size_t lb)
             GC_init_lib_bounds();
             lib_bounds_set = TRUE;
           }
-          if (caller >= GC_libpthread_start && caller < GC_libpthread_end
+          if ((caller >= GC_libpthread_start && caller < GC_libpthread_end)
               || (caller >= GC_libld_start && caller < GC_libld_end))
             return GC_malloc_uncollectable(n*lb);
           /* The two ranges are actually usually adjacent, so there may */
@@ -413,7 +399,6 @@ void * calloc(size_t n, size_t lb)
 
 #if 0
 #ifndef strdup
-# include <string.h>
   char *strdup(const char *s)
   {
     size_t lb = strlen(s) + 1;
@@ -433,7 +418,6 @@ void * calloc(size_t n, size_t lb)
 
 #ifndef strndup
   /* This is similar to strdup().       */
-# include <string.h>
   char *strndup(const char *str, size_t size)
   {
     char *copy;
@@ -453,7 +437,7 @@ void * calloc(size_t n, size_t lb)
 
 #undef GC_debug_malloc_replacement
 
-# endif /* REDIRECT_MALLOC */
+#endif /* REDIRECT_MALLOC */
 
 /* Explicitly deallocate an object p.                           */
 GC_API void GC_CALL GC_free(void * p)

@@ -17,12 +17,12 @@ dnl Process this file with autoconf to produce configure.
 # Initialization
 # ==============
 
-AC_INIT(gc,7.2alpha5,Hans.Boehm@hp.com)
+AC_INIT(gc,7.2alpha7,Hans.Boehm@hp.com)
     ## version must conform to [0-9]+[.][0-9]+(alpha[0-9]+)?
 AC_CONFIG_SRCDIR(gcj_mlc.c)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_TARGET
-AC_PREREQ(2.53)
+AC_PREREQ(2.64)
 AC_REVISION($Revision$)
 GC_SET_VERSION
 AM_INIT_AUTOMAKE([foreign dist-bzip2 nostdinc])
@@ -78,7 +78,8 @@ AH_TEMPLATE([USE_COMPILER_TLS],
             [Define to use of compiler-support for thread-local variables.])
 
 dnl Thread selection macros.
-AH_TEMPLATE([GC_THREADS],           [Define to support threads.])
+AH_TEMPLATE([GC_THREADS],           [Define to support platform-specific \
+                                     threads.])
 AH_TEMPLATE([GC_AIX_THREADS],       [Define to support IBM AIX threads.])
 AH_TEMPLATE([GC_DARWIN_THREADS],    [Define to support Darwin pthreads.])
 AH_TEMPLATE([GC_FREEBSD_THREADS],   [Define to support FreeBSD pthreads.])
@@ -90,7 +91,8 @@ AH_TEMPLATE([GC_NETBSD_THREADS],    [Define to support NetBSD pthreads.])
 AH_TEMPLATE([GC_OPENBSD_THREADS],   [Define to support OpenBSD pthreads.])
 AH_TEMPLATE([GC_OSF1_THREADS],      [Define to support Tru64 pthreads.])
 AH_TEMPLATE([GC_SOLARIS_THREADS],   [Define to support Solaris pthreads.])
-AH_TEMPLATE([GC_WIN32_THREADS],     [Define to support win32 threads.])
+AH_TEMPLATE([GC_WIN32_THREADS],     [Define to support Win32 threads.])
+AH_TEMPLATE([GC_WIN32_PTHREADS],    [Define to support win32-pthreads.])
 
 dnl System header feature requests.
 AH_TEMPLATE([_POSIX_C_SOURCE], [The POSIX feature macro.])
@@ -110,7 +112,8 @@ case "$THREADS" in
     THREADS=posix
     AC_CHECK_LIB(pthread, pthread_self, THREADDLLIBS="-lpthread",,)
     case "$host" in
-     x86-*-linux* | ia64-*-linux* | i586-*-linux* | i686-*-linux* | x86_64-*-linux* | alpha-*-linux* | sparc*-*-linux*)
+     x86-*-linux* | ia64-*-linux* | i586-*-linux* | i686-*-linux* \
+     | x86_64-*-linux* | alpha-*-linux* | sparc*-*-linux*)
         AC_DEFINE(GC_LINUX_THREADS)
         AC_DEFINE(_REENTRANT)
         if test "${enable_parallel_mark}" = yes; then
@@ -180,17 +183,17 @@ case "$THREADS" in
      *-*-solaris*)
         AC_DEFINE(GC_SOLARIS_THREADS)
         AC_DEFINE(THREAD_LOCAL_ALLOC)
-        THREADDLLIBS="-lpthread -lrt"
-        if test "$GCC" != yes; then
-          CFLAGS="$CFLAGS -O"
-          need_atomic_ops_asm=true
-        fi
+        # Need to use alternate thread library, otherwise gctest hangs
+        # on Solaris 8.
+        multi_os_directory=`$CC -print-multi-os-directory`
+        THREADDLLIBS="-L/usr/lib/lwp/$multi_os_directory \
+                      -R/usr/lib/lwp/$multi_os_directory -lpthread -lrt"
         ;;
      *-*-irix*)
         AC_DEFINE(GC_IRIX_THREADS)
         ;;
      *-*-cygwin*)
-        AC_DEFINE(GC_THREADS)
+        AC_DEFINE(GC_WIN32_THREADS)
         if test "${enable_parallel_mark}" = yes; then
           AC_DEFINE(PARALLEL_MARK)
         fi
@@ -199,6 +202,15 @@ case "$THREADS" in
         # against it.
         THREADDLLIBS=""
         win32_threads=true
+        ;;
+     *-*-mingw*)
+        AC_DEFINE(GC_WIN32_PTHREADS)
+        # Using win32-pthreads
+        if test "${enable_parallel_mark}" = yes; then
+          AC_DEFINE(PARALLEL_MARK)
+        fi
+        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        THREADDLLIBS="-lpthread"
         ;;
      *-*-darwin*)
         AC_DEFINE(GC_DARWIN_THREADS)
@@ -226,9 +238,17 @@ case "$THREADS" in
         AC_MSG_ERROR("Pthreads not supported by the GC on this platform.")
         ;;
     esac
+    case "$host" in
+     sparc*-*-solaris*)
+        if test "$GCC" != yes; then
+          CFLAGS="$CFLAGS -O"
+          need_atomic_ops_asm=true
+        fi
+        ;;
+    esac
     ;;
  win32)
-    AC_DEFINE(GC_THREADS)
+    AC_DEFINE(GC_WIN32_THREADS)
     if test "${enable_parallel_mark}" = yes; then
       AC_DEFINE(PARALLEL_MARK)
       AC_DEFINE(THREAD_LOCAL_ALLOC)
@@ -240,7 +260,7 @@ case "$THREADS" in
  dgux386)
     THREADS=dgux386
     AC_MSG_RESULT($THREADDLLIBS)
-    # Use pthread GCC  switch
+    # Use pthread GCC switch
     THREADDLLIBS=-pthread
     if test "${enable_parallel_mark}" = yes; then
         AC_DEFINE(PARALLEL_MARK)
@@ -293,9 +313,12 @@ if test $compiler_xlc = yes -a "$powerpc_darwin" = true; then
   AC_DEFINE([DARWIN_DONT_PARSE_STACK], 1, [See doc/README.macros.])
 fi
 
+case "$host" in
+# While IRIX 6 has libdl for the O32 and N32 ABIs, it's missing for N64
+# and unnecessary everywhere.
+  mips-sgi-irix6*) ;;
 # We never want libdl on darwin. It is a fake libdl that just ends up making
 # dyld calls anyway.  The same applies to Cygwin.
-case "$host" in
   *-*-darwin*) ;;
   *-*-cygwin*) ;;
   *)
@@ -384,7 +407,8 @@ case "$host" in
  alpha*-*-linux*)
     machdep="mach_dep.lo"
     ;;
- i?86-*-solaris2.[[89]] | i?86-*-solaris2.1?)
+ i?86-*-solaris2.[[89]])
+    # PROC_VDB appears to work in 2.8 and 2.9 but not in 2.10+ (for now).
     AC_DEFINE([SOLARIS25_PROC_VDB_BUG_FIXED], 1,
               [See the comment in gcconfig.h.])
     ;;

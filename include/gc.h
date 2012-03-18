@@ -382,12 +382,6 @@ GC_API void * GC_CALL GC_memalign(size_t /* align */, size_t /* lb */)
 GC_API int GC_CALL GC_posix_memalign(void ** /* memptr */, size_t /* align */,
                         size_t /* lb */);
 
-/* The following is only defined if the library has been suitably       */
-/* compiled:                                                            */
-GC_API void * GC_CALL GC_malloc_atomic_uncollectable(
-                                                size_t /* size_in_bytes */)
-                        GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1);
-
 /* Explicitly deallocate an object.  Dangerous if used incorrectly.     */
 /* Requires a pointer to the base of an object.                         */
 /* If the argument is stubborn, it should not be changeable when freed. */
@@ -615,6 +609,15 @@ GC_API void * GC_CALL GC_malloc_atomic_ignore_off_page(size_t /* lb */)
 # define GC_EXTRA_PARAMS const char * s, int i
 #endif
 
+/* The following is only defined if the library has been suitably       */
+/* compiled:                                                            */
+GC_API void * GC_CALL GC_malloc_atomic_uncollectable(
+                                                size_t /* size_in_bytes */)
+                        GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1);
+GC_API void * GC_CALL GC_debug_malloc_atomic_uncollectable(size_t,
+                                                           GC_EXTRA_PARAMS)
+                        GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1);
+
 /* Debugging (annotated) allocation.  GC_gcollect will check            */
 /* objects allocated in this way for overwrites, etc.                   */
 GC_API void * GC_CALL GC_debug_malloc(size_t /* size_in_bytes */,
@@ -682,6 +685,8 @@ GC_API void * GC_CALL GC_debug_realloc_replacement(void * /* object_addr */,
 # define GC_MALLOC_ATOMIC(sz) GC_debug_malloc_atomic(sz, GC_EXTRAS)
 # define GC_STRDUP(s) GC_debug_strdup(s, GC_EXTRAS)
 # define GC_STRNDUP(s, sz) GC_debug_strndup(s, sz, GC_EXTRAS)
+# define GC_MALLOC_ATOMIC_UNCOLLECTABLE(sz) \
+                        GC_debug_malloc_atomic_uncollectable(sz, GC_EXTRAS)
 # define GC_MALLOC_UNCOLLECTABLE(sz) \
                         GC_debug_malloc_uncollectable(sz, GC_EXTRAS)
 # define GC_MALLOC_IGNORE_OFF_PAGE(sz) \
@@ -708,6 +713,7 @@ GC_API void * GC_CALL GC_debug_realloc_replacement(void * /* object_addr */,
 # define GC_MALLOC_ATOMIC(sz) GC_malloc_atomic(sz)
 # define GC_STRDUP(s) GC_strdup(s)
 # define GC_STRNDUP(s, sz) GC_strndup(s, sz)
+# define GC_MALLOC_ATOMIC_UNCOLLECTABLE(sz) GC_malloc_atomic_uncollectable(sz)
 # define GC_MALLOC_UNCOLLECTABLE(sz) GC_malloc_uncollectable(sz)
 # define GC_MALLOC_IGNORE_OFF_PAGE(sz) \
                         GC_malloc_ignore_off_page(sz)
@@ -734,7 +740,8 @@ GC_API void * GC_CALL GC_debug_realloc_replacement(void * /* object_addr */,
 /* The following are included because they are often convenient, and    */
 /* reduce the chance for a misspecified size argument.  But calls may   */
 /* expand to something syntactically incorrect if t is a complicated    */
-/* type expression.                                                     */
+/* type expression.  Note that, unlike C++ new operator, these ones     */
+/* may return NULL (if out of memory).                                  */
 #define GC_NEW(t)               ((t*)GC_MALLOC(sizeof(t)))
 #define GC_NEW_ATOMIC(t)        ((t*)GC_MALLOC_ATOMIC(sizeof(t)))
 #define GC_NEW_STUBBORN(t)      ((t*)GC_MALLOC_STUBBORN(sizeof(t)))
@@ -975,22 +982,19 @@ GC_API void GC_CALLBACK GC_ignore_warn_proc(char *, GC_word);
 /* Note that putting pointers in atomic objects or in           */
 /* non-pointer slots of "typed" objects is equivalent to        */
 /* disguising them in this way, and may have other advantages.  */
-#if defined(I_HIDE_POINTERS) || defined(GC_I_HIDE_POINTERS)
-  typedef GC_word GC_hidden_pointer;
-# define HIDE_POINTER(p) (~(GC_hidden_pointer)(p))
-# define REVEAL_POINTER(p) ((void *)HIDE_POINTER(p))
-  /* Converting a hidden pointer to a real pointer requires verifying   */
-  /* that the object still exists.  This involves acquiring the         */
-  /* allocator lock to avoid a race with the collector.                 */
-#endif /* I_HIDE_POINTERS */
+typedef GC_word GC_hidden_pointer;
+#define GC_HIDE_POINTER(p) (~(GC_hidden_pointer)(p))
+/* Converting a hidden pointer to a real pointer requires verifying     */
+/* that the object still exists.  This involves acquiring the           */
+/* allocator lock to avoid a race with the collector.                   */
+#define GC_REVEAL_POINTER(p) ((void *)GC_HIDE_POINTER(p))
 
-/* The GC-prefixed symbols are preferred for new code (I_HIDE_POINTERS, */
-/* HIDE_POINTER and REVEAL_POINTER remain for compatibility).           */
-//#ifdef GC_I_HIDE_POINTERS
-  typedef GC_word GC_hidden_pointer;
-# define GC_HIDE_POINTER(p) (~(GC_hidden_pointer)(p))
-# define GC_REVEAL_POINTER(p) ((void*) (~(GC_hidden_pointer)(p)))
-//#endif
+#ifdef I_HIDE_POINTERS
+  /* This exists only for compatibility (the GC-prefixed symbols are    */
+  /* preferred for new code).                                           */
+# define HIDE_POINTER(p) GC_HIDE_POINTER(p)
+# define REVEAL_POINTER(p) GC_REVEAL_POINTER(p)
+#endif
 
 typedef void * (GC_CALLBACK * GC_fn_type)(void * /* client_data */);
 GC_API void * GC_CALL GC_call_with_alloc_lock(GC_fn_type /* fn */,
@@ -1064,11 +1068,15 @@ GC_API void * GC_CALL GC_call_with_stack_base(GC_stack_base_func /* fn */,
   /* always done implicitly.  This is normally done implicitly if GC_   */
   /* functions are called to create the thread, e.g. by including gc.h  */
   /* (which redefines some system functions) before calling the system  */
-  /* thread creation function.                                          */
+  /* thread creation function.  Nonetheless, thread cleanup routines    */
+  /* (eg., pthread key destructor) typically require manual thread      */
+  /* registering (and unregistering) if pointers to GC-allocated        */
+  /* objects are manipulated inside.                                    */
   /* It is also always done implicitly on some platforms if             */
   /* GC_use_threads_discovery() is called at start-up.  Except for the  */
   /* latter case, the explicit call is normally required for threads    */
   /* created by third-party libraries.                                  */
+  /* A manually registered thread requires manual unregistering.        */
   GC_API int GC_CALL GC_register_my_thread(const struct GC_stack_base *);
 
   /* Unregister the current thread.  Only an explicitly registered      */
@@ -1506,11 +1514,6 @@ GC_API void GC_CALL GC_win32_free_heap(void);
   /* Allocation really goes through GC_amiga_allocwrapper_do    */
 # include "gc_amiga_redirects.h"
 #endif
-
-  /*
-   * GC_REDIRECT_TO_LOCAL is now redundant;
-   * that's the default with THREAD_LOCAL_ALLOC.
-   */
 
 #ifdef __cplusplus
   }  /* end of extern "C" */

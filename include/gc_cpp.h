@@ -252,9 +252,9 @@ inline void* operator new(
     classes derived from "gc_cleanup" or containing members derived
     from "gc_cleanup". */
 
-#   ifdef GC_PLACEMENT_DELETE
-      inline void operator delete( void*, GCPlacement, GCCleanUpFunc, void * );
-#   endif
+#ifdef GC_PLACEMENT_DELETE
+  inline void operator delete( void*, GCPlacement, GCCleanUpFunc, void * );
+#endif
 
 #ifdef _MSC_VER
  /** This ensures that the system default operator new[] doesn't get
@@ -307,10 +307,9 @@ _Ret_bytecap_(_Size) inline void* operator new[](size_t size, int nBlockUse, con
 
 #endif /* _MSC_VER */
 
-
 #ifdef GC_OPERATOR_NEW_ARRAY
 
-inline void* operator new[](
+  inline void* operator new[](
     size_t size,
     GCPlacement gcp,
     GCCleanUpFunc cleanup = 0,
@@ -360,29 +359,25 @@ inline void gc::operator delete( void* obj ) {
 #endif
 
 #ifdef GC_OPERATOR_NEW_ARRAY
-
-inline void* gc::operator new[]( size_t size ) {
+  inline void* gc::operator new[]( size_t size ) {
     return gc::operator new( size );}
 
-inline void* gc::operator new[]( size_t size, GCPlacement gcp ) {
+  inline void* gc::operator new[]( size_t size, GCPlacement gcp ) {
     return gc::operator new( size, gcp );}
 
-inline void* gc::operator new[]( size_t size, void *p ) {
+  inline void* gc::operator new[]( size_t size, void *p ) {
     return p;}
 
-inline void gc::operator delete[]( void* obj ) {
+  inline void gc::operator delete[]( void* obj ) {
     gc::operator delete( obj );}
 
-#ifdef GC_PLACEMENT_DELETE
-  inline void gc::operator delete[]( void*, void* ) {}
+# ifdef GC_PLACEMENT_DELETE
+    inline void gc::operator delete[]( void*, void* ) {}
 
-  inline void gc::operator delete[]( void* p, GCPlacement gcp ) {
-    gc::operator delete(p); }
-
-#endif
-
+    inline void gc::operator delete[]( void* p, GCPlacement gcp ) {
+      gc::operator delete(p); }
+# endif
 #endif /* GC_OPERATOR_NEW_ARRAY */
-
 
 inline gc_cleanup::~gc_cleanup() {
     GC_register_finalizer_ignore_self( GC_base(this), 0, 0, 0, 0 );}
@@ -397,7 +392,7 @@ inline gc_cleanup::gc_cleanup() {
     if (0 != base)  {
       // Don't call the debug version, since this is a real base address.
       GC_register_finalizer_ignore_self(
-        base, (GC_finalization_proc)cleanup, (void*) ((char*) this - (char*) base),
+        base, (GC_finalization_proc)cleanup, (void*)((char*)this - (char*)base),
         &oldProc, &oldData );
       if (0 != oldProc) {
         GC_register_finalizer_ignore_self( base, oldProc, oldData, 0, 0 );}}}
@@ -435,27 +430,26 @@ inline void* operator new(
     return obj;
 }
 
-# ifdef GC_PLACEMENT_DELETE
-inline void operator delete (
+#ifdef GC_PLACEMENT_DELETE
+  inline void operator delete (
     void *p,
     GCPlacement gcp,
     GCCleanUpFunc cleanup,
     void* clientData )
-{
+  {
     GC_FREE(p);
-}
-# endif
+  }
+#endif /* GC_PLACEMENT_DELETE */
 
 #ifdef GC_OPERATOR_NEW_ARRAY
-
-inline void* operator new[](
+  inline void* operator new[](
     size_t size,
     GCPlacement gcp,
     GCCleanUpFunc cleanup,
     void* clientData )
-{
-    return ::operator new( size, gcp, cleanup, clientData );}
-
+  {
+    return ::operator new( size, gcp, cleanup, clientData );
+  }
 #endif /* GC_OPERATOR_NEW_ARRAY */
 
 // oooohh... big hack (mainly for vnl which explicitly references mem-stuff via std namespace)
@@ -466,6 +460,13 @@ namespace std
 	using ::GC_realloc;
 	using ::GC_malloc_uncollectable;
 }
+#if defined(__CYGWIN__)
+# include <new> // for delete throw()
+  inline void operator delete(void *p)
+  {
+    GC_FREE(p);
+  }
+#endif
 
 #endif // __cplusplus
 
