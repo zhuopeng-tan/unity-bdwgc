@@ -96,6 +96,10 @@ GC_INNER unsigned long GC_lock_holder = NO_THREAD;
 # if !defined(GC_DARWIN_THREADS) && !defined(GC_OPENBSD_THREADS)
 #   undef pthread_sigmask
 # endif
+# ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+#   undef pthread_cancel
+#   undef pthread_exit
+# endif
 # undef pthread_join
 # undef pthread_detach
 # if defined(GC_OSF1_THREADS) && defined(_PTHREAD_USE_MANGLED_NAMES_) \
@@ -104,6 +108,10 @@ GC_INNER unsigned long GC_lock_holder = NO_THREAD;
 #   define pthread_create __pthread_create
 #   define pthread_join __pthread_join
 #   define pthread_detach __pthread_detach
+#   ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+#     define pthread_cancel __pthread_cancel
+#     define pthread_exit __pthread_exit
+#   endif
 # endif
 
 #ifdef GC_USE_LD_WRAP
@@ -115,6 +123,10 @@ GC_INNER unsigned long GC_lock_holder = NO_THREAD;
     int REAL_FUNC(pthread_detach)(pthread_t);
 #   if !defined(GC_DARWIN_THREADS) && !defined(GC_OPENBSD_THREADS)
       int REAL_FUNC(pthread_sigmask)(int, const sigset_t *, sigset_t *);
+#   endif
+#   ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+      int REAL_FUNC(pthread_cancel)(pthread_t);
+      void REAL_FUNC(pthread_exit)(void *) GC_PTHREAD_EXIT_ATTRIBUTE;
 #   endif
 #else
 #   ifdef GC_USE_DLOPEN_WRAP
@@ -134,6 +146,12 @@ GC_INNER unsigned long GC_lock_holder = NO_THREAD;
       static GC_pthread_join_t REAL_FUNC(pthread_join);
       typedef int (* GC_pthread_detach_t)(pthread_t);
       static GC_pthread_detach_t REAL_FUNC(pthread_detach);
+#     ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+        typedef int (* GC_pthread_cancel_t)(pthread_t);
+        static GC_pthread_cancel_t REAL_FUNC(pthread_cancel);
+        typedef void (* GC_pthread_exit_t)(void *) GC_PTHREAD_EXIT_ATTRIBUTE;
+        static GC_pthread_exit_t REAL_FUNC(pthread_exit);
+#     endif
 #   else
 #     define WRAP_FUNC(f) GC_##f
 #     if !defined(GC_DGUX386_THREADS)
@@ -169,6 +187,18 @@ GC_INNER unsigned long GC_lock_holder = NO_THREAD;
       {
           return pthread_detach(t);
       }
+
+#     ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+        GC_API int GC_pthread_cancel(pthread_t t)
+        {
+          return pthread_cancel(t);
+        }
+
+        GC_API GC_PTHREAD_EXIT_ATTRIBUTE void GC_pthread_exit(void *retval)
+        {
+          pthread_exit(retval);
+        }
+#     endif /* GC_PTHREAD_EXIT_ATTRIBUTE */
 #endif /* Linker-based interception. */
 
 #ifdef GC_USE_DLOPEN_WRAP
@@ -201,12 +231,23 @@ GC_INNER unsigned long GC_lock_holder = NO_THREAD;
 #   endif
     REAL_FUNC(pthread_create) = (GC_pthread_create_t)
                                 dlsym(dl_handle, "pthread_create");
+#   ifdef RTLD_NEXT
+      if (REAL_FUNC(pthread_create) == 0)
+        ABORT("pthread_create not found"
+              " (probably -lgc is specified after -lpthread)");
+#   endif
     REAL_FUNC(pthread_sigmask) = (GC_pthread_sigmask_t)
                                 dlsym(dl_handle, "pthread_sigmask");
     REAL_FUNC(pthread_join) = (GC_pthread_join_t)
                                 dlsym(dl_handle, "pthread_join");
     REAL_FUNC(pthread_detach) = (GC_pthread_detach_t)
                                 dlsym(dl_handle, "pthread_detach");
+#   ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+      REAL_FUNC(pthread_cancel) = (GC_pthread_cancel_t)
+                                    dlsym(dl_handle, "pthread_cancel");
+      REAL_FUNC(pthread_exit) = (GC_pthread_exit_t)
+                                  dlsym(dl_handle, "pthread_exit");
+#   endif
     GC_syms_initialized = TRUE;
   }
 
@@ -317,12 +358,13 @@ STATIC void * GC_mark_thread(void * id)
 
 STATIC pthread_t GC_mark_threads[MAX_MARKERS];
 
-#define PTHREAD_CREATE REAL_FUNC(pthread_create)
-
 static void start_mark_threads(void)
 {
     unsigned i;
     pthread_attr_t attr;
+
+    GC_ASSERT(I_DONT_HOLD_LOCK());
+    INIT_REAL_SYMS(); /* for pthread_create */
 
     if (0 != pthread_attr_init(&attr)) ABORT("pthread_attr_init failed");
 
@@ -347,7 +389,7 @@ static void start_mark_threads(void)
       }
 #   endif /* HPUX || GC_DGUX386_THREADS */
     for (i = 0; i < GC_markers - 1; ++i) {
-      if (0 != PTHREAD_CREATE(GC_mark_threads + i, &attr,
+      if (0 != REAL_FUNC(pthread_create)(GC_mark_threads + i, &attr,
                               GC_mark_thread, (void *)(word)i)) {
         WARN("Marker thread creation failed, errno = %" GC_PRIdPTR "\n",
              errno);
@@ -1055,6 +1097,13 @@ GC_API int GC_CALL GC_unregister_my_thread(void)
 #   if defined(THREAD_LOCAL_ALLOC)
       GC_destroy_thread_local(&(me->tlfs));
 #   endif
+#   ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+      /* Handle DISABLED_GC flag which is set by the    */
+      /* intercepted pthread_cancel or pthread_exit.    */
+      if ((me -> flags & DISABLED_GC) != 0) {
+        GC_dont_gc--;
+      }
+#   endif
     if (me -> flags & DETACHED) {
         GC_delete_thread(pthread_self());
     } else {
@@ -1091,7 +1140,7 @@ GC_API int WRAP_FUNC(pthread_join)(pthread_t thread, void **retval)
     /* can't have been recycled by pthreads.                            */
     UNLOCK();
     result = REAL_FUNC(pthread_join)(thread, retval);
-# if defined (GC_FREEBSD_THREADS)
+# if defined(GC_FREEBSD_THREADS)
     /* On FreeBSD, the wrapped pthread_join() sometimes returns (what
        appears to be) a spurious EINTR which caused the test and real code
        to gratuitously fail.  Having looked at system pthread library source
@@ -1133,6 +1182,60 @@ GC_API int WRAP_FUNC(pthread_detach)(pthread_t thread)
     }
     return result;
 }
+
+#ifdef GC_PTHREAD_EXIT_ATTRIBUTE
+  /* We should deal with the fact that apparently on Solaris and,       */
+  /* probably, on some Linux we can't collect while a thread is         */
+  /* exiting, since signals aren't handled properly.  This currently    */
+  /* gives rise to deadlocks.  The only workaround seen is to intercept */
+  /* pthread_cancel() and pthread_exit(), and disable the collections   */
+  /* until the thread exit handler is called.  That's ugly, because we  */
+  /* risk growing the heap unnecessarily. But it seems that we don't    */
+  /* really have an option in that the process is not in a fully        */
+  /* functional state while a thread is exiting.                        */
+
+  GC_API int WRAP_FUNC(pthread_cancel)(pthread_t thread)
+  {
+#   ifdef CANCEL_SAFE
+      GC_thread thread_gc_id;
+      DCL_LOCK_STATE;
+#   endif
+
+    INIT_REAL_SYMS();
+#   ifdef CANCEL_SAFE
+      LOCK();
+      thread_gc_id = GC_lookup_thread(thread);
+      /* We test DISABLED_GC because pthread_exit could be called at    */
+      /* the same time.  (If thread_gc_id is NULL then pthread_cancel   */
+      /* should return ESRCH.)                                          */
+      if (thread_gc_id != 0 && (thread_gc_id -> flags & DISABLED_GC) == 0) {
+        thread_gc_id -> flags |= DISABLED_GC;
+        GC_dont_gc++;
+      }
+      UNLOCK();
+#   endif
+    return REAL_FUNC(pthread_cancel)(thread);
+  }
+
+  GC_API GC_PTHREAD_EXIT_ATTRIBUTE void WRAP_FUNC(pthread_exit)(void *retval)
+  {
+    GC_thread me;
+    DCL_LOCK_STATE;
+
+    INIT_REAL_SYMS();
+    LOCK();
+    me = GC_lookup_thread(pthread_self());
+    /* We test DISABLED_GC because someone else could call    */
+    /* pthread_cancel at the same time.                       */
+    if (me != 0 && (me -> flags & DISABLED_GC) == 0) {
+      me -> flags |= DISABLED_GC;
+      GC_dont_gc++;
+    }
+    UNLOCK();
+
+    REAL_FUNC(pthread_exit)(retval);
+  }
+#endif /* GC_PTHREAD_EXIT_ATTRIBUTE */
 
 GC_INNER GC_bool GC_in_thread_creation = FALSE;
                                 /* Protected by allocation lock. */
@@ -1250,7 +1353,7 @@ STATIC void * GC_start_routine(void * arg)
         /* GC_get_stack_base may call pthread_getattr_np, which can     */
         /* unfortunately call realloc, which may allocate from an       */
         /* unregistered thread.  This is unpleasant, since it might     */
-        /* force heap growth.                                           */
+        /* force heap growth (or, even, heap overflow).                 */
         GC_disable();
 #     endif
       if (GC_get_stack_base(&sb) != GC_SUCCESS)
