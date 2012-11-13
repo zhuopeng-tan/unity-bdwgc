@@ -501,9 +501,9 @@ case "$host" in
 esac
 
 dnl Include defines that have become de facto standard.
-dnl ALL_INTERIOR_POINTERS can be overridden in startup code.
+dnl ALL_INTERIOR_POINTERS and NO_EXECUTE_PERMISSION can be overridden in the startup code.
 AC_DEFINE([NO_EXECUTE_PERMISSION], [1],
-	  [Define to allow the collector to disable execute permission of heap objects.])
+	  [Define to make the collector not allocate executable memory by default.])
 AC_DEFINE([ALL_INTERIOR_POINTERS], [1],
 	  [Define to recognise all pointers to the interior of objects.])
 
