@@ -19,6 +19,10 @@
 
 #if defined(GC_WIN32_THREADS)
 
+#ifndef WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN 1
+#endif
+#define NOSERVICE
 #include <windows.h>
 
 #ifdef THREAD_LOCAL_ALLOC
@@ -40,9 +44,12 @@
 
  /* Cygwin-specific forward decls */
 # undef pthread_create
-# undef pthread_sigmask
 # undef pthread_join
 # undef pthread_detach
+
+# ifndef GC_NO_PTHREAD_SIGMASK
+#   undef pthread_sigmask
+# endif
 
 # ifdef DEBUG_THREADS
 #   ifdef CYGWIN32
@@ -1502,12 +1509,11 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
   {
     word my_mark_no = 0;
 
+    if ((word)id == (word)-1) return 0; /* to make compiler happy */
     marker_sp[(word)id] = GC_approx_sp();
 #   ifdef IA64
       marker_bsp[(word)id] = GC_save_regs_in_stack();
 #   endif
-
-    if ((word)id == (word)-1) return 0; /* to make compiler happy */
 
     for (;; ++my_mark_no) {
       if (my_mark_no - GC_mark_no > (word)2) {
@@ -2392,7 +2398,7 @@ GC_INNER void GC_thr_init(void)
   /* Cygwin-pthreads calls CreateThread internally, but it's not easily */
   /* interceptible by us..., so intercept pthread_create instead.       */
   GC_API int GC_pthread_create(pthread_t *new_thread,
-                               GC_PTHREAD_CONST pthread_attr_t *attr,
+                               GC_PTHREAD_CREATE_CONST pthread_attr_t *attr,
                                void *(*start_routine)(void *), void *arg)
   {
     if (!parallel_initialized) GC_init_parallel();
@@ -2523,16 +2529,16 @@ GC_INNER void GC_thr_init(void)
     UNLOCK();
   }
 
-# ifndef GC_WIN32_PTHREADS
-    /* win32 pthread does not support sigmask */
-    /* nothing required here... */
+# ifndef GC_NO_PTHREAD_SIGMASK
+    /* Win32 pthread does not support sigmask.  */
+    /* So, nothing required here...             */
     GC_API int GC_pthread_sigmask(int how, const sigset_t *set,
                                   sigset_t *oset)
     {
       if (!parallel_initialized) GC_init_parallel();
       return pthread_sigmask(how, set, oset);
     }
-# endif
+# endif /* !GC_NO_PTHREAD_SIGMASK */
 
   GC_API int GC_pthread_detach(pthread_t thread)
   {

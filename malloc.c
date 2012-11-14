@@ -182,7 +182,7 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
           } else {
 #           ifdef THREADS
               /* Clear any memory that might be used for GC descriptors */
-              /* before we release the lock.                          */
+              /* before we release the lock.                            */
                 ((word *)result)[0] = 0;
                 ((word *)result)[1] = 0;
                 ((word *)result)[GRANULES_TO_WORDS(lg)-1] = 0;
@@ -219,7 +219,7 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
         lg = GC_size_map[lb];
         opp = &(GC_aobjfreelist[lg]);
         LOCK();
-        if( EXPECT((op = *opp) == 0, 0) ) {
+        if (EXPECT((op = *opp) == 0, FALSE)) {
             UNLOCK();
             return(GENERAL_MALLOC((word)lb, PTRFREE));
         }
@@ -255,6 +255,42 @@ GC_API char * GC_CALL GC_strdup(const char *s)
   return copy;
 }
 
+GC_API char * GC_CALL GC_strndup(const char *str, size_t size)
+{
+  char *copy;
+  size_t len = strlen(str); /* str is expected to be non-NULL  */
+  if (len > size)
+    len = size;
+  copy = GC_malloc_atomic(len + 1);
+  if (copy == NULL) {
+#   ifndef MSWINCE
+      errno = ENOMEM;
+#   endif
+    return NULL;
+  }
+  BCOPY(str, copy, len);
+  copy[len] = '\0';
+  return copy;
+}
+
+#ifdef GC_REQUIRE_WCSDUP
+# include <wchar.h> /* for wcslen() */
+
+  GC_API wchar_t * GC_CALL GC_wcsdup(const wchar_t *str)
+  {
+    size_t lb = (wcslen(str) + 1) * sizeof(wchar_t);
+    wchar_t *copy = GC_malloc_atomic(lb);
+    if (copy == NULL) {
+#     ifndef MSWINCE
+        errno = ENOMEM;
+#     endif
+      return NULL;
+    }
+    BCOPY(str, copy, lb);
+    return copy;
+  }
+#endif /* GC_REQUIRE_WCSDUP */
+
 /* Allocate lb bytes of composite (pointerful) data */
 #ifdef THREAD_LOCAL_ALLOC
   GC_INNER void * GC_core_malloc(size_t lb)
@@ -271,9 +307,9 @@ GC_API char * GC_CALL GC_strdup(const char *s)
         lg = GC_size_map[lb];
         opp = (void **)&(GC_objfreelist[lg]);
         LOCK();
-        if( EXPECT((op = *opp) == 0, 0) ) {
+        if (EXPECT((op = *opp) == 0, FALSE)) {
             UNLOCK();
-            return(GENERAL_MALLOC((word)lb, NORMAL));
+            return (GENERAL_MALLOC((word)lb, NORMAL));
         }
         GC_ASSERT(0 == obj_link(op)
                   || ((word)obj_link(op)
@@ -380,13 +416,13 @@ void * calloc(size_t n, size_t lb)
 # include <string.h>
   char *strdup(const char *s)
   {
-    size_t len = strlen(s) + 1;
-    char * result = ((char *)REDIRECT_MALLOC(len+1));
+    size_t lb = strlen(s) + 1;
+    char *result = (char *)REDIRECT_MALLOC(lb);
     if (result == 0) {
       errno = ENOMEM;
       return 0;
     }
-    BCOPY(s, result, len+1);
+    BCOPY(s, result, lb);
     return result;
   }
 #endif /* !defined(strdup) */
@@ -394,6 +430,26 @@ void * calloc(size_t n, size_t lb)
  /* and thus the right thing will happen even without overriding it.     */
  /* This seems to be true on most Linux systems.                         */
 #endif
+
+#ifndef strndup
+  /* This is similar to strdup().       */
+# include <string.h>
+  char *strndup(const char *str, size_t size)
+  {
+    char *copy;
+    size_t len = strlen(str);
+    if (len > size)
+      len = size;
+    copy = (char *)REDIRECT_MALLOC(len + 1);
+    if (copy == NULL) {
+      errno = ENOMEM;
+      return NULL;
+    }
+    BCOPY(str, copy, len);
+    copy[len] = '\0';
+    return copy;
+  }
+#endif /* !strndup */
 
 #undef GC_debug_malloc_replacement
 
@@ -432,7 +488,7 @@ GC_API void GC_CALL GC_free(void * p)
     ngranules = BYTES_TO_GRANULES(sz);
     knd = hhdr -> hb_obj_kind;
     ok = &GC_obj_kinds[knd];
-    if (EXPECT((ngranules <= MAXOBJGRANULES), 1)) {
+    if (EXPECT(ngranules <= MAXOBJGRANULES, TRUE)) {
         LOCK();
         GC_bytes_freed += sz;
         if (IS_UNCOLLECTABLE(knd)) GC_non_gc_bytes -= sz;

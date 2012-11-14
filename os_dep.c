@@ -189,7 +189,9 @@ STATIC ssize_t GC_repeat_read(int fd, char *buf, size_t count)
   STATIC size_t GC_get_maps_len(void)
   {
     int f = open("/proc/self/maps", O_RDONLY);
-    size_t result = GC_get_file_len(f);
+    size_t result;
+    if (f < 0) return 0; /* treat missing file as empty */
+    result = GC_get_file_len(f);
     close(f);
     return result;
   }
@@ -227,9 +229,9 @@ GC_INNER char * GC_get_maps(void)
     /* This only matters with threads enabled, and if we use    */
     /* this to locate roots (not the default).                  */
 
-    /* Determine the initial size of /proc/self/maps.           */
-    /* Note that lseek doesn't work, at least as of 2.6.15.     */
 #   ifdef THREADS
+        /* Determine the initial size of /proc/self/maps.       */
+        /* Note that lseek doesn't work, at least as of 2.6.15. */
         maps_size = GC_get_maps_len();
         if (0 == maps_size) return 0;
 #   else
@@ -1044,9 +1046,8 @@ GC_INNER word GC_page_size = 0;
           /* Should probably call the real read, if read is wrapped.    */
     char stat_buf[STAT_BUF_SIZE];
     int f;
-    char c;
-    word result = 0;
-    size_t i, buf_offset = 0;
+    word result;
+    int i, buf_offset = 0, len;
 
     /* First try the easy way.  This should work for glibc 2.2  */
     /* This fails in a prelinked ("prelink" command) executable */
@@ -1075,24 +1076,35 @@ GC_INNER word GC_page_size = 0;
       }
 #   endif
     f = open("/proc/self/stat", O_RDONLY);
-    if (f < 0 || STAT_READ(f, stat_buf, STAT_BUF_SIZE) < 2 * STAT_SKIP) {
-        ABORT("Couldn't read /proc/self/stat");
-    }
-    c = stat_buf[buf_offset++];
+    if (f < 0)
+      ABORT("Couldn't read /proc/self/stat");
+    len = STAT_READ(f, stat_buf, STAT_BUF_SIZE);
+    close(f);
+
     /* Skip the required number of fields.  This number is hopefully    */
     /* constant across all Linux implementations.                       */
-      for (i = 0; i < STAT_SKIP; ++i) {
-        while (isspace(c)) c = stat_buf[buf_offset++];
-        while (!isspace(c)) c = stat_buf[buf_offset++];
+    for (i = 0; i < STAT_SKIP; ++i) {
+      while (buf_offset < len && isspace(stat_buf[buf_offset++])) {
+        /* empty */
       }
-    while (isspace(c)) c = stat_buf[buf_offset++];
-    while (isdigit(c)) {
-      result *= 10;
-      result += c - '0';
-      c = stat_buf[buf_offset++];
+      while (buf_offset < len && !isspace(stat_buf[buf_offset++])) {
+        /* empty */
+      }
     }
-    close(f);
-    if (result < 0x100000) ABORT("Absurd stack bottom value");
+    /* Skip spaces.     */
+    while (buf_offset < len && isspace(stat_buf[buf_offset])) {
+      buf_offset++;
+    }
+    /* Find the end of the number and cut the buffer there.     */
+    for (i = 0; buf_offset + i < len; i++) {
+      if (!isdigit(stat_buf[buf_offset + i])) break;
+    }
+    if (buf_offset + i >= len) ABORT("Could not parse /proc/self/stat");
+    stat_buf[buf_offset + i] = '\0';
+
+    result = (word)STRTOULL(&stat_buf[buf_offset], NULL, 10);
+    if (result < 0x100000 || (result & (sizeof(word) - 1)) != 0)
+      ABORT("Absurd stack bottom value");
     return (ptr_t)result;
   }
 

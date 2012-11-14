@@ -130,7 +130,7 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 # include "gc_hdrs.h"
 #endif
 
-#if __GNUC__ >= 3
+#if __GNUC__ >= 3 && !defined(LINT2)
 # define EXPECT(expr, outcome) __builtin_expect(expr,outcome)
   /* Equivalent to (expr), but predict that usually (expr)==outcome. */
 #else
@@ -241,7 +241,13 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 #define GC_INVOKE_FINALIZERS() GC_notify_or_invoke_finalizers()
 
 #if !defined(DONT_ADD_BYTE_AT_END)
-# define EXTRA_BYTES GC_all_interior_pointers
+# ifdef LINT2
+    /* Explicitly instruct the code analysis tool that                  */
+    /* GC_all_interior_pointers is assumed to have only 0 or 1 value.   */
+#   define EXTRA_BYTES (GC_all_interior_pointers? 1 : 0)
+# else
+#   define EXTRA_BYTES GC_all_interior_pointers
+# endif
 # define MAX_EXTRA_BYTES 1
 #else
 # define EXTRA_BYTES 0
@@ -606,44 +612,37 @@ GC_EXTERN GC_warn_proc GC_current_warn_proc;
 /*                   */
 /*********************/
 
-/*  Heap block size, bytes. Should be power of 2.               */
+/* Heap block size, bytes. Should be power of 2.                */
 /* Incremental GC with MPROTECT_VDB currently requires the      */
 /* page size to be a multiple of HBLKSIZE.  Since most modern   */
 /* architectures support variable page sizes down to 4K, and    */
 /* X86 is generally 4K, we now default to 4K, except for        */
 /*   Alpha: Seems to be used with 8K pages.                     */
 /*   SMALL_CONFIG: Want less block-level fragmentation.         */
-
 #ifndef HBLKSIZE
-# ifdef SMALL_CONFIG
-#   define CPP_LOG_HBLKSIZE 10
-# else
-#   if defined(ALPHA)
+# if defined(LARGE_CONFIG) || !defined(SMALL_CONFIG)
+#   ifdef ALPHA
 #     define CPP_LOG_HBLKSIZE 13
 #   else
 #     define CPP_LOG_HBLKSIZE 12
 #   endif
+# else
+#   define CPP_LOG_HBLKSIZE 10
 # endif
 #else
 # if HBLKSIZE == 512
 #   define CPP_LOG_HBLKSIZE 9
-# endif
-# if HBLKSIZE == 1024
+# elif HBLKSIZE == 1024
 #   define CPP_LOG_HBLKSIZE 10
-# endif
-# if HBLKSIZE == 2048
+# elif HBLKSIZE == 2048
 #   define CPP_LOG_HBLKSIZE 11
-# endif
-# if HBLKSIZE == 4096
+# elif HBLKSIZE == 4096
 #   define CPP_LOG_HBLKSIZE 12
-# endif
-# if HBLKSIZE == 8192
+# elif HBLKSIZE == 8192
 #   define CPP_LOG_HBLKSIZE 13
-# endif
-# if HBLKSIZE == 16384
+# elif HBLKSIZE == 16384
 #   define CPP_LOG_HBLKSIZE 14
-# endif
-# ifndef CPP_LOG_HBLKSIZE
+# else
     --> fix HBLKSIZE
 # endif
 # undef HBLKSIZE
@@ -685,11 +684,11 @@ GC_EXTERN GC_warn_proc GC_current_warn_proc;
 # define ROUNDED_UP_GRANULES(n) \
         BYTES_TO_GRANULES((n) + (GRANULE_BYTES - 1 + EXTRA_BYTES))
 # if MAX_EXTRA_BYTES == 0
-#  define SMALL_OBJ(bytes) EXPECT((bytes) <= (MAXOBJBYTES), 1)
+#  define SMALL_OBJ(bytes) EXPECT((bytes) <= (MAXOBJBYTES), TRUE)
 # else
 #  define SMALL_OBJ(bytes) \
-            (EXPECT((bytes) <= (MAXOBJBYTES - MAX_EXTRA_BYTES), 1) || \
-             (bytes) <= (MAXOBJBYTES - EXTRA_BYTES))
+            (EXPECT((bytes) <= (MAXOBJBYTES - MAX_EXTRA_BYTES), TRUE) \
+             || (bytes) <= MAXOBJBYTES - EXTRA_BYTES)
         /* This really just tests bytes <= MAXOBJBYTES - EXTRA_BYTES.   */
         /* But we try to avoid looking up EXTRA_BYTES.                  */
 # endif
@@ -709,30 +708,28 @@ GC_EXTERN GC_warn_proc GC_current_warn_proc;
 
 # ifdef LARGE_CONFIG
 #   if CPP_WORDSZ == 32
-#    define LOG_PHT_ENTRIES  20 /* Collisions likely at 1M blocks,      */
+#     define LOG_PHT_ENTRIES 20 /* Collisions likely at 1M blocks,      */
                                 /* which is >= 4GB.  Each table takes   */
                                 /* 128KB, some of which may never be    */
                                 /* touched.                             */
 #   else
-#    define LOG_PHT_ENTRIES  21 /* Collisions likely at 2M blocks,      */
+#     define LOG_PHT_ENTRIES 21 /* Collisions likely at 2M blocks,      */
                                 /* which is >= 8GB.  Each table takes   */
                                 /* 256KB, some of which may never be    */
                                 /* touched.                             */
 #   endif
-# else
-#   ifdef SMALL_CONFIG
-#     define LOG_PHT_ENTRIES  15 /* Collisions are likely if heap grows */
-                                 /* to more than 32K hblks = 128MB.     */
-                                 /* Each hash table occupies 4K bytes.  */
-#   else /* default "medium" configuration */
-#     define LOG_PHT_ENTRIES  18 /* Collisions are likely if heap grows */
+# elif !defined(SMALL_CONFIG)
+#   define LOG_PHT_ENTRIES  18   /* Collisions are likely if heap grows */
                                  /* to more than 256K hblks >= 1GB.     */
                                  /* Each hash table occupies 32K bytes. */
                                  /* Even for somewhat smaller heaps,    */
                                  /* say half that, collisions may be an */
                                  /* issue because we blacklist          */
                                  /* addresses outside the heap.         */
-#   endif
+# else
+#   define LOG_PHT_ENTRIES  15   /* Collisions are likely if heap grows */
+                                 /* to more than 32K hblks = 128MB.     */
+                                 /* Each hash table occupies 4K bytes.  */
 # endif
 # define PHT_ENTRIES ((word)1 << LOG_PHT_ENTRIES)
 # define PHT_SIZE (PHT_ENTRIES >> LOGWL)
@@ -912,12 +909,10 @@ struct hblk {
 /* registered as static roots.                                  */
 # ifdef LARGE_CONFIG
 #   define MAX_ROOT_SETS 8192
+# elif !defined(SMALL_CONFIG)
+#   define MAX_ROOT_SETS 2048
 # else
-#   ifdef SMALL_CONFIG
-#     define MAX_ROOT_SETS 512
-#   else
-#     define MAX_ROOT_SETS 2048
-#   endif
+#   define MAX_ROOT_SETS 512
 # endif
 
 # define MAX_EXCLUSIONS (MAX_ROOT_SETS/4)
@@ -958,16 +953,12 @@ struct roots {
 #   else
 #     define MAX_HEAP_SECTS 768         /* Separately added heap sections. */
 #   endif
+# elif defined(SMALL_CONFIG)
+#   define MAX_HEAP_SECTS 128           /* Roughly 256MB (128*2048*1K)  */
+# elif CPP_WORDSZ > 32
+#   define MAX_HEAP_SECTS 1024          /* Roughly 8GB                  */
 # else
-#   ifdef SMALL_CONFIG
-#     define MAX_HEAP_SECTS 128         /* Roughly 256MB (128*2048*1K)  */
-#   else
-#     if CPP_WORDSZ > 32
-#       define MAX_HEAP_SECTS 1024      /* Roughly 8GB                  */
-#     else
-#       define MAX_HEAP_SECTS 512       /* Roughly 4GB                  */
-#     endif
-#   endif
+#   define MAX_HEAP_SECTS 512           /* Roughly 4GB                  */
 # endif
 #endif /* !MAX_HEAP_SECTS */
 
@@ -1548,7 +1539,6 @@ void GC_register_data_segments(void);
 #endif
 
 /* Black listing: */
-GC_INNER void GC_bl_init(void);
 #ifdef PRINT_BLACK_LIST
   GC_INNER void GC_add_to_black_list_normal(word p, ptr_t source);
                         /* Register bits as a possible future false     */
@@ -1601,11 +1591,6 @@ GC_INNER GC_bool GC_add_map_entry(size_t sz);
 GC_INNER void GC_register_displacement_inner(size_t offset);
                                 /* Version of GC_register_displacement  */
                                 /* that assumes lock is already held.   */
-
-GC_INNER void GC_initialize_offsets(void);
-                                /* Initialize GC_valid_offsets,         */
-                                /* depending on current                 */
-                                /* GC_all_interior_pointers settings.   */
 
 /*  hblk allocation: */
 GC_INNER void GC_new_hblk(size_t size_in_granules, int kind);
