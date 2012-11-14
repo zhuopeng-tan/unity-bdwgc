@@ -36,6 +36,10 @@
 //  so hardcode it here, no point in making it configurable
 #define GC_DLL
 #define GC_WIN32_THREADS
+// lets provide the equivalent of system's malloc()
+// this is useful if we force-include the gc but hack other libs
+//  to be a bit more gc-aware
+#define ATOMIC_UNCOLLECTABLE
 
 // help debug mixed up preproc symbols
 #if (defined(WIN64) && !defined(_WIN64))
@@ -718,6 +722,7 @@ GC_API void * GC_CALL GC_debug_realloc_replacement(void * /* object_addr */,
 # define GC_MALLOC_ATOMIC_IGNORE_OFF_PAGE(sz) \
                         GC_debug_malloc_atomic_ignore_off_page(sz, GC_EXTRAS)
 # define GC_REALLOC(old, sz) GC_debug_realloc(old, sz, GC_EXTRAS)
+# define GC_MALLOC_ATOMIC_UNCOLLECTABLE(sz) GC_debug_malloc_atomic_uncollectable(sz)
 # define GC_FREE(p) GC_debug_free(p)
 # define GC_REGISTER_FINALIZER(p, f, d, of, od) \
       GC_debug_register_finalizer(p, f, d, of, od)
@@ -743,6 +748,7 @@ GC_API void * GC_CALL GC_debug_realloc_replacement(void * /* object_addr */,
 # define GC_MALLOC_ATOMIC_IGNORE_OFF_PAGE(sz) \
                         GC_malloc_atomic_ignore_off_page(sz)
 # define GC_REALLOC(old, sz) GC_realloc(old, sz)
+# define GC_MALLOC_ATOMIC_UNCOLLECTABLE(sz) GC_malloc_atomic_uncollectable(sz)
 # define GC_FREE(p) GC_free(p)
 # define GC_REGISTER_FINALIZER(p, f, d, of, od) \
       GC_register_finalizer(p, f, d, of, od)
