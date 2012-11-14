@@ -108,7 +108,7 @@ case "$THREADS" in
     ;;
  posix | pthreads)
     THREADS=posix
-    THREADDLLIBS=-lpthread
+    AC_CHECK_LIB(pthread, pthread_self, THREADDLLIBS="-lpthread",,)
     case "$host" in
      x86-*-linux* | ia64-*-linux* | i586-*-linux* | i686-*-linux* | x86_64-*-linux* | alpha-*-linux* | sparc*-*-linux*)
         AC_DEFINE(GC_LINUX_THREADS)
@@ -204,10 +204,10 @@ case "$THREADS" in
         AC_DEFINE(GC_DARWIN_THREADS)
         AC_DEFINE(THREAD_LOCAL_ALLOC)
         AC_MSG_WARN("Explicit GC_INIT() calls may be required.");
-        # Parallel-mark is currently unreliable on Darwin; ignore request
-        # if test "${enable_parallel_mark}" = yes; then
-        #   AC_DEFINE(PARALLEL_MARK)
-        # fi
+        # Parallel-mark is not well-tested on Darwin
+        if test "${enable_parallel_mark}" = yes; then
+          AC_DEFINE(PARALLEL_MARK)
+        fi
         darwin_threads=true
         ;;
      *-*-osf*)
@@ -217,7 +217,7 @@ case "$THREADS" in
           AC_DEFINE(THREAD_LOCAL_ALLOC)
           AC_MSG_WARN("Explicit GC_INIT() calls may be required.");
           # May want to enable it in other cases, too.
-          # Measurements havent yet been done.
+          # Measurements have not yet been done.
         fi
         INCLUDES="$INCLUDES -pthread"
         THREADDLLIBS="-lpthread -lrt"

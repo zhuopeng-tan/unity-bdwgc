@@ -609,7 +609,9 @@ GC_API void * GC_CALL GC_malloc_atomic_ignore_off_page(size_t /* lb */)
 #endif
 
 #if defined(__linux__) || defined(__GLIBC__)
-# include <features.h>
+# if !defined(__native_client__)
+#   include <features.h>
+# endif
 # if (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1 || __GLIBC__ > 2) \
         && !defined(__ia64__) && !defined(__UCLIBC__) \
         && !defined(GC_HAVE_BUILTIN_BACKTRACE)
@@ -1056,6 +1058,15 @@ GC_API void * GC_CALL GC_call_with_stack_base(GC_stack_base_func /* fn */,
         /* GC_NO_THREADS is not returned by any GC function anymore.    */
 #define GC_UNIMPLEMENTED 3 /* Not yet implemented on this platform.     */
 
+#if defined(GC_DARWIN_THREADS) || defined(GC_WIN32_THREADS)
+  /* Use implicit thread registration and processing (via Win32 DllMain */
+  /* or Darwin task_threads).  Deprecated.  Must be called before       */
+  /* GC_INIT() and other GC routines.  Should be avoided if             */
+  /* GC_pthread_create, GC_beginthreadex (or GC_CreateThread) could be  */
+  /* called instead.  Disables parallelized GC on Win32.                */
+  GC_API void GC_CALL GC_use_threads_discovery(void);
+#endif
+
 #ifdef GC_THREADS
   /* Return the signal number (constant) used by the garbage collector  */
   /* to suspend threads on POSIX systems.  Return -1 otherwise.         */
@@ -1082,7 +1093,7 @@ GC_API void * GC_CALL GC_call_with_stack_base(GC_stack_base_func /* fn */,
   /* (which redefines some system functions) before calling the system  */
   /* thread creation function.                                          */
   /* It is also always done implicitly on some platforms if             */
-  /* GC_use_DllMain() is called at start-up.  Except for the            */
+  /* GC_use_threads_discovery() is called at start-up.  Except for the  */
   /* latter case, the explicit call is normally required for threads    */
   /* created by third-party libraries.                                  */
   GC_API int GC_CALL GC_register_my_thread(const struct GC_stack_base *);
@@ -1310,7 +1321,7 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
     /* (and call GC_unregister_my_thread before thread termination), so */
     /* that they will be recorded in the thread table.  For backward    */
     /* compatibility, it is possible to build the GC with GC_DLL        */
-    /* defined, and to call GC_use_DllMain().  This implicitly          */
+    /* defined, and to call GC_use_threads_discovery.  This implicitly  */
     /* registers all created threads, but appears to be less robust.    */
     /* Currently the collector expects all threads to fall through and  */
     /* terminate normally, or call GC_endthreadex() or GC_ExitThread,   */
@@ -1358,11 +1369,8 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #   define WinMain GC_WinMain
 # endif
 
-  /* Use implicit thread registration via DllMain.  Deprecated.  Must   */
-  /* be called before GC_INIT() and other GC routines.  Should be       */
-  /* avoided if GC_beginthreadex() or GC_CreateThread() could be called */
-  /* instead.                                                           */
-  GC_API void GC_CALL GC_use_DllMain(void);
+  /* For compatibility only. */
+# define GC_use_DllMain GC_use_threads_discovery
 
 # ifndef GC_NO_THREAD_REDIRECTS
 #   define CreateThread GC_CreateThread
@@ -1502,6 +1510,9 @@ GC_API int GC_CALL GC_get_force_unmap_on_gcollect(void);
 # define GC_INIT_CONF_INITIAL_HEAP_SIZE /* empty */
 #endif
 
+/* Portable clients should call this at the program start-up.  More     */
+/* over, some platforms require this call to be done strictly from the  */
+/* primordial thread.                                                   */
 #define GC_INIT() { GC_INIT_CONF_DONT_EXPAND; /* pre-init */ \
                     GC_INIT_CONF_FORCE_UNMAP_ON_GCOLLECT; \
                     GC_INIT_CONF_MAX_RETRIES; \

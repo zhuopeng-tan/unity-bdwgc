@@ -44,12 +44,17 @@
 # include <floss.h>
 #endif
 
-#if defined(THREADS) && defined(PCR)
-# include "il/PCR_IL.h"
-  GC_INNER PCR_Th_ML GC_allocate_ml;
-#endif
-/* For other platforms with threads, the lock and possibly              */
-/* GC_lock_holder variables are defined in the thread support code.     */
+#ifdef THREADS
+# ifdef PCR
+#   include "il/PCR_IL.h"
+    GC_INNER PCR_Th_ML GC_allocate_ml;
+# elif defined(SN_TARGET_PS3)
+#   include <pthread.h>
+    GC_INNER pthread_mutex_t GC_allocate_ml;
+# endif
+  /* For other platforms with threads, the lock and possibly            */
+  /* GC_lock_holder variables are defined in the thread support code.   */
+#endif /* THREADS */
 
 #ifdef DYNAMIC_LOADING
   /* We need to register the main data segment.  Returns  TRUE unless   */
@@ -631,7 +636,6 @@ GC_API void GC_CALL GC_init(void)
 #   if !defined(THREADS) && defined(GC_ASSERTIONS)
         word dummy;
 #   endif
-
 #   ifdef GC_INITIAL_HEAP_SIZE
         word initial_heap_sz = divHBLKSZ(GC_INITIAL_HEAP_SIZE);
 #   else
@@ -677,7 +681,15 @@ GC_API void GC_CALL GC_init(void)
     /* in fact safely initialize them here.                */
 #   ifdef THREADS
       GC_ASSERT(!GC_need_to_lock);
-#   endif
+#     ifdef SN_TARGET_PS3
+        {
+          pthread_mutexattr_t mattr;
+          pthread_mutexattr_init(&mattr);
+          pthread_mutex_init(&GC_allocate_ml, &mattr);
+          pthread_mutexattr_destroy(&mattr);
+        }
+#     endif
+#   endif /* THREADS */
 #   if defined(GC_WIN32_THREADS) && !defined(GC_PTHREADS)
      {
 #     ifndef MSWINCE
@@ -842,6 +854,17 @@ GC_API void GC_CALL GC_init(void)
           }
         }
       }
+      {
+        char * string = GETENV("GC_USE_ENTIRE_HEAP");
+        if (string != NULL) {
+          if (*string == '0' && *(string + 1) == '\0') {
+            /* "0" is used to turn off the mode. */
+            GC_use_entire_heap = FALSE;
+          } else {
+            GC_use_entire_heap = TRUE;
+          }
+        }
+      }
 #   endif
     maybe_install_looping_handler();
     /* Adjust normal object descriptor for extra allocation.    */
@@ -906,7 +929,7 @@ GC_API void GC_CALL GC_init(void)
     GC_STATIC_ASSERT((signed_word)(-1) < (signed_word)0);
 #   ifndef GC_DISABLE_INCREMENTAL
       if (GC_incremental || 0 != GETENV("GC_ENABLE_INCREMENTAL")) {
-        /* For GWW_MPROTECT on Win32, this needs to happen before any   */
+        /* For GWW_VDB on Win32, this needs to happen before any        */
         /* heap memory is allocated.                                    */
         GC_dirty_init();
         GC_ASSERT(GC_bytes_allocd == 0)
@@ -1186,10 +1209,21 @@ GC_API void GC_CALL GC_enable_incremental(void)
 # endif
 #endif
 
-#if !defined(MSWIN32) && !defined(MSWINCE) && !defined(OS2) \
-    && !defined(MACOS)  && !defined(ECOS) && !defined(NOSYS)
-STATIC int GC_write(int fd, const char *buf, size_t len)
-{
+#if defined(ECOS) || defined(NOSYS)
+  STATIC int GC_write(int fd, const char *buf, size_t len)
+  {
+#   ifdef ECOS
+      /* FIXME: This seems to be defined nowhere at present.    */
+      /* _Jv_diag_write(buf, len); */
+#   else
+      /* No writing.    */
+#   endif
+    return len;
+  }
+#elif !defined(MSWIN32) && !defined(MSWINCE) && !defined(OS2) \
+      && !defined(MACOS)
+  STATIC int GC_write(int fd, const char *buf, size_t len)
+  {
      int bytes_written = 0;
      int result;
      IF_CANCEL(int cancel_state;)
@@ -1210,26 +1244,8 @@ STATIC int GC_write(int fd, const char *buf, size_t len)
     }
     RESTORE_CANCEL(cancel_state);
     return(bytes_written);
-}
+  }
 #endif /* UN*X */
-
-#ifdef ECOS
-  STATIC int GC_write(int fd, const char *buf, size_t len)
-  {
-    /* FIXME: This seems to be defined nowhere at present. */
-    /* _Jv_diag_write(buf, len); */
-    return len;
-  }
-#endif
-
-#ifdef NOSYS
-  STATIC int GC_write(int fd, const char *buf, size_t len)
-  {
-    /* No writing.  */
-    return len;
-  }
-#endif
-
 
 #if defined(MSWIN32) || defined(MSWINCE)
     /* FIXME: This is pretty ugly ... */

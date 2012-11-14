@@ -50,7 +50,7 @@
 
 # include "gc_typed.h"
 # include "private/gc_priv.h"   /* For output, locking, MIN_WORDS,      */
-                                /* and some statistics, and gcconfig.h. */
+                                /* some statistics and gcconfig.h.      */
 
 # if defined(MSWIN32) || defined(MSWINCE)
 #   include <windows.h>
@@ -1284,6 +1284,10 @@ void check_heap_stats(void)
 #   endif
                 GC_invoke_finalizers();
       }
+      if (GC_print_stats) {
+          GC_log_printf("Primordial thread stack bottom: %p\n",
+                        GC_stackbottom);
+      }
     (void)GC_printf("Completed %u tests\n", n_tests);
     (void)GC_printf("Allocated %d collectable objects\n", collectable_count);
     (void)GC_printf("Allocated %d uncollectable objects\n",
@@ -1404,6 +1408,8 @@ void GC_CALLBACK warn_proc(char *msg, GC_word p)
 #     else
 #       ifdef PROC_VDB
           GC_printf("Reading dirty bits from /proc\n");
+#       elif defined(GWW_VDB)
+          GC_printf("Using GetWriteWatch-based implementation\n");
 #       else
           GC_printf("Using DEFAULT_VDB dirty bit implementation\n");
 #       endif
@@ -1529,9 +1535,11 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev,
     HANDLE win_thr_h;
 # endif
   DWORD thread_id;
-# if defined(GC_DLL) && !defined(GC_NO_DLLMAIN) && !defined(MSWINCE) \
-        && !defined(THREAD_LOCAL_ALLOC) && !defined(PARALLEL_MARK)
-    GC_use_DllMain();  /* Test with implicit thread registration if possible. */
+# if defined(GC_DLL) && !defined(GC_NO_THREADS_DISCOVERY) \
+        && !defined(MSWINCE) && !defined(THREAD_LOCAL_ALLOC) \
+        && !defined(PARALLEL_MARK)
+    GC_use_threads_discovery();
+                /* Test with implicit thread registration if possible. */
     GC_printf("Using DllMain to track threads\n");
 # endif
   GC_COND_INIT();
@@ -1643,6 +1651,12 @@ int main(void)
 #   ifdef PTW32_STATIC_LIB
         pthread_win32_process_attach_np ();
         pthread_win32_thread_attach_np ();
+#   endif
+#   if defined(GC_DARWIN_THREADS) && !defined(GC_NO_THREADS_DISCOVERY) \
+        && !defined(DARWIN_DONT_PARSE_STACK) && !defined(THREAD_LOCAL_ALLOC)
+      /* Test with the Darwin implicit thread registration. */
+      GC_use_threads_discovery();
+      GC_printf("Using Darwin task-threads-based world stop and push\n");
 #   endif
     GC_COND_INIT();
 

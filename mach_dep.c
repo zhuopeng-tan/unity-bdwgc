@@ -185,8 +185,11 @@ asm static void PushMacRegisters()
 # include <signal.h>
 # ifndef NO_GETCONTEXT
 #   include <ucontext.h>
+#   ifdef GETCONTEXT_FPU_EXCMASK_BUG
+#     include <fenv.h>
+#   endif
 # endif
-#endif
+#endif /* !HAVE_PUSH_REGS */
 
 /* Ensure that either registers are pushed, or callee-save registers    */
 /* are somewhere on the stack, and then call fn(arg, ctxt).             */
@@ -204,8 +207,36 @@ GC_INNER void GC_with_callee_saves_pushed(void (*fn)(ptr_t, void *),
       /* ARM and MIPS Linux often doesn't support a real     */
       /* getcontext().                                       */
       ucontext_t ctxt;
+#     ifdef GETCONTEXT_FPU_EXCMASK_BUG
+        /* Workaround a bug (clearing the FPU exception mask) in        */
+        /* getcontext on Linux/x86_64.                                  */
+#       ifdef X86_64
+          /* We manipulate FPU control word here just not to force the  */
+          /* client application to use -lm linker option.               */
+          unsigned short old_fcw;
+          __asm__ __volatile__ ("fstcw %0" : "=m" (*&old_fcw));
+#       else
+          int except_mask = fegetexcept();
+#       endif
+#     endif
       if (getcontext(&ctxt) < 0)
-        ABORT ("Getcontext failed: Use another register retrieval method?");
+        ABORT ("getcontext failed: Use another register retrieval method?");
+#     ifdef GETCONTEXT_FPU_EXCMASK_BUG
+#       ifdef X86_64
+          __asm__ __volatile__ ("fldcw %0" : : "m" (*&old_fcw));
+          {
+            unsigned mxcsr;
+            /* And now correct the exception mask in SSE MXCSR. */
+            __asm__ __volatile__ ("stmxcsr %0" : "=m" (*&mxcsr));
+            mxcsr = (mxcsr & ~(FE_ALL_EXCEPT << 7)) |
+                        ((old_fcw & FE_ALL_EXCEPT) << 7);
+            __asm__ __volatile__ ("ldmxcsr %0" : : "m" (*&mxcsr));
+          }
+#       else /* !X86_64 */
+          if (feenableexcept(except_mask) < 0)
+            ABORT("feenableexcept failed");
+#       endif
+#     endif
       context = &ctxt;
 #     if defined(SPARC) || defined(IA64)
         /* On a register window machine, we need to save register       */
