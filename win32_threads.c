@@ -2571,33 +2571,6 @@ GC_INNER void GC_thr_init(void)
 #     endif
       static int entry_count = 0;
 
-#ifdef GC_DEBUG
-#ifndef _WIN64
-	  if (reason == DLL_PROCESS_ATTACH)
-	  {
-			// wow64: running 32-bit-gc on 64-bit-sys is broken!
-			// code copied from msdn docs example
-			typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS)(HANDLE, PBOOL);
-			LPFN_ISWOW64PROCESS fnIsWow64Process = 0;
-			fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(GetModuleHandleA("kernel32"), "IsWow64Process");
-			if (NULL != fnIsWow64Process)
-			{
-				BOOL bIsWow64 = FALSE;
-				if (fnIsWow64Process(GetCurrentProcess(), &bIsWow64))
-				{
-					if (bIsWow64)
-						MessageBoxA(NULL, 
-							"This program uses the BDWGC garbage collector compiled for 32-bit "
-							"but running on a 64-bit version of Windows.\n"
-							"This is known to be broken due to a design flaw in Windows itself! Expect erratic behaviour...", 
-							"32-bit program running on 64-bit system", 
-							MB_ICONWARNING | MB_OK);
-				}
-			}
-	  }
-#endif
-#endif
-
 	  // despite the comment above
 	  //  this seems to work fine...
 	  GC_use_DllMain();
