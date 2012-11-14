@@ -1671,6 +1671,9 @@ void GC_register_data_segments(void)
   /* the malloc heap with HeapWalk on the default heap.  But that       */
   /* apparently works only for NT-based Windows.                        */
 
+  STATIC size_t GC_max_root_size = 100000; /* Appr. largest root size. */
+
+# ifndef CYGWIN32
   /* In the long run, a better data structure would also be nice ...    */
   STATIC struct GC_malloc_heap_list {
     void * allocation_base;
@@ -1690,9 +1693,6 @@ void GC_register_data_segments(void)
     return FALSE;
   }
 
-  STATIC size_t GC_max_root_size = 100000; /* Appr. largest root size. */
-
-# ifndef CYGWIN32
   STATIC void *GC_get_allocation_base(void *p)
   {
     MEMORY_BASIC_INFORMATION buf;
@@ -1715,14 +1715,18 @@ void GC_register_data_segments(void)
         size_t req_size = 10000;
         do {
           void *p = malloc(req_size);
-          if (0 == p) { free(new_l); return; }
+          if (0 == p) {
+            free(new_l);
+            return;
+          }
           candidate = GC_get_allocation_base(p);
           free(p);
           req_size *= 2;
         } while (GC_is_malloc_heap_base(candidate)
                  && req_size < GC_max_root_size/10 && req_size < 500000);
         if (GC_is_malloc_heap_base(candidate)) {
-          free(new_l); return;
+          free(new_l);
+          return;
         }
     }
     if (GC_print_stats)
@@ -1745,7 +1749,9 @@ void GC_register_data_segments(void)
      unsigned i;
 #    ifndef REDIRECT_MALLOC
        if (GC_root_size > GC_max_root_size) GC_max_root_size = GC_root_size;
-       if (GC_is_malloc_heap_base(p)) return TRUE;
+#      ifndef CYGWIN32
+         if (GC_is_malloc_heap_base(p)) return TRUE;
+#      endif
 #    endif
      for (i = 0; i < GC_n_heap_bases; i++) {
          if (GC_heap_bases[i] == p) return TRUE;
@@ -3013,7 +3019,8 @@ GC_INNER void GC_remove_protection(struct hblk *h, word nblocks,
 #   include <errno.h>
 #   if defined(FREEBSD)
 #     define SIG_OK TRUE
-#     define CODE_OK (si -> si_code == BUS_PAGE_FAULT)
+#     define CODE_OK (si -> si_code == BUS_PAGE_FAULT \
+                      || si -> si_code == 2 /* experimentally determined */)
 #   elif defined(OSF1)
 #     define SIG_OK (sig == SIGSEGV)
 #     define CODE_OK (si -> si_code == 2 /* experimentally determined */)
@@ -3031,11 +3038,11 @@ GC_INNER void GC_remove_protection(struct hblk *h, word nblocks,
         /* architectures.                                               */
 #   elif defined(HPUX)
 #     define SIG_OK (sig == SIGSEGV || sig == SIGBUS)
-#     define CODE_OK (si -> si_code == SEGV_ACCERR) \
-                     || (si -> si_code == BUS_ADRERR) \
-                     || (si -> si_code == BUS_UNKNOWN) \
-                     || (si -> si_code == SEGV_UNKNOWN) \
-                     || (si -> si_code == BUS_OBJERR)
+#     define CODE_OK (si -> si_code == SEGV_ACCERR \
+                      || si -> si_code == BUS_ADRERR \
+                      || si -> si_code == BUS_UNKNOWN \
+                      || si -> si_code == SEGV_UNKNOWN \
+                      || si -> si_code == BUS_OBJERR)
 #   elif defined(SUNOS5SIGS)
 #     define SIG_OK (sig == SIGSEGV)
 #     define CODE_OK (si -> si_code == SEGV_ACCERR)
@@ -3879,12 +3886,14 @@ GC_INNER void GC_mprotect_resume(void)
   GC_mprotect_thread_notify(ID_RESUME);
 }
 
+# ifndef DARWIN_SUSPEND_GC_THREADS
+    GC_INNER void GC_darwin_register_mach_handler_thread(mach_port_t thread);
+# endif
+
 #else /* !THREADS */
 /* The compiler should optimize away any GC_mprotect_state computations */
-#define GC_mprotect_state GC_MP_NORMAL
+# define GC_mprotect_state GC_MP_NORMAL
 #endif
-
-GC_INNER void GC_darwin_register_mach_handler_thread(mach_port_t thread);
 
 STATIC void *GC_mprotect_thread(void *arg)
 {
@@ -3901,10 +3910,11 @@ STATIC void *GC_mprotect_thread(void *arg)
     mach_msg_body_t msgh_body;
     char data[1024];
   } msg;
-
   mach_msg_id_t id;
 
-  GC_darwin_register_mach_handler_thread(mach_thread_self());
+# if defined(THREADS) && !defined(DARWIN_SUSPEND_GC_THREADS)
+    GC_darwin_register_mach_handler_thread(mach_thread_self());
+# endif
 
   for(;;) {
     r = mach_msg(&msg.head, MACH_RCV_MSG | MACH_RCV_LARGE |

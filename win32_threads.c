@@ -230,24 +230,26 @@ struct GC_Thread_Rep {
                                 /* GC_call_with_gc_active() of this     */
                                 /* thread.  May be NULL.                */
 
-  unsigned finalizer_nested;
-  unsigned finalizer_skipped;   /* Used by GC_check_finalizer_nested()  */
+  unsigned short finalizer_skipped;
+  unsigned char finalizer_nested;
+                                /* Used by GC_check_finalizer_nested()  */
                                 /* to minimize the level of recursion   */
                                 /* when a client finalizer allocates    */
                                 /* memory (initially both are 0).       */
 
-  GC_bool suspended;
+  unsigned char suspended; /* really of GC_bool type */
 
 # ifdef GC_PTHREADS
-    void *status; /* hold exit value until join in case it's a pointer */
-    pthread_t pthread_id;
-    short flags;                /* Protected by GC lock.                */
+    unsigned char flags;        /* Protected by GC lock.                */
 #   define FINISHED 1           /* Thread has exited.                   */
 #   define DETACHED 2           /* Thread is intended to be detached.   */
 #   define KNOWN_FINISHED(t) (((t) -> flags) & FINISHED)
+    pthread_t pthread_id;
+    void *status;  /* hold exit value until join in case it's a pointer */
 # else
 #   define KNOWN_FINISHED(t) 0
 # endif
+
 # ifdef THREAD_LOCAL_ALLOC
     struct thread_local_freelists tlfs;
 # endif
@@ -557,7 +559,7 @@ GC_INNER void GC_reset_finalizer_nested(void)
 /* otherwise returns a pointer to the thread-local finalizer_nested.    */
 /* Called by GC_notify_or_invoke_finalizers() only (the lock is held).  */
 /* GC_check_finalizer_nested() is the same as in pthread_support.c.     */
-GC_INNER unsigned *GC_check_finalizer_nested(void)
+GC_INNER unsigned char *GC_check_finalizer_nested(void)
 {
   GC_thread me = GC_lookup_thread_inner(GetCurrentThreadId());
   unsigned nesting_level = me->finalizer_nested;
@@ -568,7 +570,7 @@ GC_INNER unsigned *GC_check_finalizer_nested(void)
     if (++me->finalizer_skipped < (1U << nesting_level)) return NULL;
     me->finalizer_skipped = 0;
   }
-  me->finalizer_nested = nesting_level + 1;
+  me->finalizer_nested = (unsigned char)(nesting_level + 1);
   return &me->finalizer_nested;
 }
 
@@ -768,13 +770,16 @@ GC_INNER void GC_do_blocking_inner(ptr_t data, void * context)
   struct blocking_data * d = (struct blocking_data *) data;
   DWORD t = GetCurrentThreadId();
   GC_thread me;
+# ifdef IA64
+    ptr_t stack_ptr = GC_save_regs_in_stack();
+# endif
   DCL_LOCK_STATE;
 
   LOCK();
   me = GC_lookup_thread_inner(t);
   GC_ASSERT(me -> thread_blocked_sp == NULL);
 # ifdef IA64
-    me -> backing_store_ptr = GC_save_regs_in_stack();
+    me -> backing_store_ptr = stack_ptr;
 # endif
   me -> thread_blocked_sp = (ptr_t) &d; /* save approx. sp */
   /* Save context here if we want to support precise stack marking */
@@ -980,7 +985,7 @@ STATIC void GC_suspend(GC_thread t)
     if (SuspendThread(t -> handle) == (DWORD)-1)
       ABORT("SuspendThread failed");
 # endif /* !MSWINCE */
-  t -> suspended = TRUE;
+  t -> suspended = (unsigned char)TRUE;
 # if defined(MPROTECT_VDB)
     AO_CLEAR(&GC_fault_handler_lock);
 # endif
@@ -1068,7 +1073,9 @@ GC_INNER void GC_stop_world(void)
 
 GC_INNER void GC_start_world(void)
 {
-  DWORD thread_id = GetCurrentThreadId();
+# ifdef GC_ASSERTIONS
+    DWORD thread_id = GetCurrentThreadId();
+# endif
   int i;
 
   GC_ASSERT(I_HOLD_LOCK());
@@ -1076,8 +1083,8 @@ GC_INNER void GC_start_world(void)
     LONG my_max = GC_get_max_thread_index();
     for (i = 0; i <= my_max; i++) {
       GC_thread t = (GC_thread)(dll_thread_table + i);
-      if (t -> stack_base != 0 && t -> suspended
-          && t -> id != thread_id) {
+      if (t -> suspended) {
+        GC_ASSERT(t -> stack_base != 0 && t -> id != thread_id);
         if (ResumeThread(THREAD_HANDLE(t)) == (DWORD)-1)
           ABORT("ResumeThread failed");
         t -> suspended = FALSE;
@@ -1089,8 +1096,8 @@ GC_INNER void GC_start_world(void)
 
     for (i = 0; i < THREAD_TABLE_SZ; i++) {
       for (t = GC_threads[i]; t != 0; t = t -> tm.next) {
-        if (t -> stack_base != 0 && t -> suspended
-            && t -> id != thread_id) {
+        if (t -> suspended) {
+          GC_ASSERT(t -> stack_base != 0 && t -> id != thread_id);
           if (ResumeThread(THREAD_HANDLE(t)) == (DWORD)-1)
             ABORT("ResumeThread failed");
           UNPROTECT_THREAD(t);

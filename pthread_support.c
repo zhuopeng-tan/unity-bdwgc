@@ -321,6 +321,21 @@ static ptr_t marker_sp[MAX_MARKERS - 1] = {0};
   static ptr_t marker_bsp[MAX_MARKERS - 1] = {0};
 #endif
 
+#if defined(GC_DARWIN_THREADS) && !defined(DARWIN_SUSPEND_GC_THREADS)
+  static mach_port_t marker_mach_threads[MAX_MARKERS - 1] = {0};
+
+  /* Used only by GC_suspend_thread_list().     */
+  GC_INNER GC_bool GC_is_mach_marker(thread_act_t thread)
+  {
+    int i;
+    for (i = 0; i < GC_markers - 1; i++) {
+      if (marker_mach_threads[i] == thread)
+        return TRUE;
+    }
+    return FALSE;
+  }
+#endif /* GC_DARWIN_THREADS */
+
 STATIC void * GC_mark_thread(void * id)
 {
   word my_mark_no = 0;
@@ -332,6 +347,9 @@ STATIC void * GC_mark_thread(void * id)
   marker_sp[(word)id] = GC_approx_sp();
 # ifdef IA64
     marker_bsp[(word)id] = GC_save_regs_in_stack();
+# endif
+# if defined(GC_DARWIN_THREADS) && !defined(DARWIN_SUSPEND_GC_THREADS)
+    marker_mach_threads[(word)id] = mach_thread_self();
 # endif
 
   if ((word)id == (word)-1) return 0; /* to make compiler happy */
@@ -529,7 +547,7 @@ GC_INNER void GC_reset_finalizer_nested(void)
 /* collector (to minimize the risk of a deep finalizers recursion),     */
 /* otherwise returns a pointer to the thread-local finalizer_nested.    */
 /* Called by GC_notify_or_invoke_finalizers() only (the lock is held).  */
-GC_INNER unsigned *GC_check_finalizer_nested(void)
+GC_INNER unsigned char *GC_check_finalizer_nested(void)
 {
   GC_thread me = GC_lookup_thread(pthread_self());
   unsigned nesting_level = me->finalizer_nested;
@@ -540,7 +558,7 @@ GC_INNER unsigned *GC_check_finalizer_nested(void)
     if (++me->finalizer_skipped < (1U << nesting_level)) return NULL;
     me->finalizer_skipped = 0;
   }
-  me->finalizer_nested = nesting_level + 1;
+  me->finalizer_nested = (unsigned char)(nesting_level + 1);
   return &me->finalizer_nested;
 }
 
@@ -822,19 +840,20 @@ STATIC void GC_fork_child_proc(void)
     sysctl(mib, sizeof(mib)/sizeof(int), &res, &len, NULL, 0);
     return res;
   }
-#endif  /* GC_NETBSD_THREADS */
+#endif  /* GC_DARWIN_THREADS || ... */
 
 #if defined(GC_LINUX_THREADS) && defined(INCLUDE_LINUX_THREAD_DESCR)
   __thread int GC_dummy_thread_local;
 #endif
 
+#ifndef GC_DARWIN_THREADS
+  GC_INNER void GC_stop_init(void); /* defined in pthread_stop_world.c */
+#endif
+
 /* We hold the allocation lock. */
 GC_INNER void GC_thr_init(void)
 {
-#   ifndef GC_DARWIN_THREADS
-        int dummy;
-#   endif
-    GC_thread t;
+    int dummy;
 
     if (GC_thr_initialized) return;
     GC_thr_initialized = TRUE;
@@ -860,15 +879,19 @@ GC_INNER void GC_thr_init(void)
         }
 #   endif
     /* Add the initial thread, so we can stop it.       */
-      t = GC_new_thread(pthread_self());
+    {
+      GC_thread t = GC_new_thread(pthread_self());
 #     ifdef GC_DARWIN_THREADS
-         t -> stop_info.mach_thread = mach_thread_self();
+        t -> stop_info.mach_thread = mach_thread_self();
 #     else
-         t -> stop_info.stack_ptr = (ptr_t)(&dummy);
+        t -> stop_info.stack_ptr = (ptr_t)(&dummy);
 #     endif
       t -> flags = DETACHED | MAIN_THREAD;
+    }
 
-    GC_stop_init();
+#   ifndef GC_DARWIN_THREADS
+      GC_stop_init();
+#   endif
 
     /* Set GC_nprocs.  */
       {
@@ -980,7 +1003,11 @@ GC_INNER void GC_init_parallel(void)
     }
     return(REAL_FUNC(pthread_sigmask)(how, set, oset));
   }
-#endif /* !GC_DARWIN_THREADS */
+#endif /* !GC_DARWIN_THREADS && !GC_OPENBSD_THREADS */
+
+#if defined(GC_DARWIN_THREADS) && !defined(DARWIN_DONT_PARSE_STACK)
+  GC_INNER ptr_t GC_FindTopOfStack(unsigned long);
+#endif
 
 /* Wrapper for functions that are likely to block for an appreciable    */
 /* length of time.                                                      */
@@ -990,25 +1017,43 @@ GC_INNER void GC_do_blocking_inner(ptr_t data, void * context)
 {
     struct blocking_data * d = (struct blocking_data *) data;
     GC_thread me;
+#   if defined(SPARC) || defined(IA64)
+        ptr_t stack_ptr = GC_save_regs_in_stack();
+#   endif
+#   if defined(GC_DARWIN_THREADS) && !defined(DARWIN_DONT_PARSE_STACK)
+        GC_bool topOfStackUnset = FALSE;
+#   endif
     DCL_LOCK_STATE;
 
     LOCK();
     me = GC_lookup_thread(pthread_self());
     GC_ASSERT(!(me -> thread_blocked));
 #   ifdef SPARC
-        me -> stop_info.stack_ptr = GC_save_regs_in_stack();
-#   elif !defined(GC_DARWIN_THREADS)
+        me -> stop_info.stack_ptr = stack_ptr;
+#   else
         me -> stop_info.stack_ptr = GC_approx_sp();
 #   endif
-#   ifdef IA64
-        me -> backing_store_ptr = GC_save_regs_in_stack();
+#   if defined(GC_DARWIN_THREADS) && !defined(DARWIN_DONT_PARSE_STACK)
+        if (me -> topOfStack == NULL) {
+            /* GC_do_blocking_inner is not called recursively,  */
+            /* so topOfStack should be computed now.            */
+            topOfStackUnset = TRUE;
+            me -> topOfStack = GC_FindTopOfStack(0);
+        }
 #   endif
-    me -> thread_blocked = TRUE;
+#   ifdef IA64
+        me -> backing_store_ptr = stack_ptr;
+#   endif
+    me -> thread_blocked = (unsigned char)TRUE;
     /* Save context here if we want to support precise stack marking */
     UNLOCK();
     d -> client_data = (d -> fn)(d -> client_data);
     LOCK();   /* This will block if the world is stopped.       */
     me -> thread_blocked = FALSE;
+#   if defined(GC_DARWIN_THREADS) && !defined(DARWIN_DONT_PARSE_STACK)
+        if (topOfStackUnset)
+            me -> topOfStack = NULL; /* make topOfStack unset again */
+#   endif
     UNLOCK();
 }
 
@@ -1038,18 +1083,14 @@ GC_API void * GC_CALL GC_call_with_gc_active(GC_fn_type fn,
         GC_stackbottom = (ptr_t)(&stacksect);
     }
 
-    if (me -> thread_blocked == FALSE) {
+    if (!me->thread_blocked) {
       /* We are not inside GC_do_blocking() - do nothing more.  */
       UNLOCK();
       return fn(client_data);
     }
 
     /* Setup new "stack section".       */
-#   ifdef GC_DARWIN_THREADS
-      /* FIXME: Implement it (and GC_do_blocking_inner) for Darwin. */
-#   else
-      stacksect.saved_stack_ptr = me -> stop_info.stack_ptr;
-#   endif
+    stacksect.saved_stack_ptr = me -> stop_info.stack_ptr;
 #   ifdef IA64
       /* This is the same as in GC_call_with_stack_base().      */
       stacksect.backing_store_end = GC_save_regs_in_stack();
@@ -1072,10 +1113,8 @@ GC_API void * GC_CALL GC_call_with_gc_active(GC_fn_type fn,
 #   ifdef IA64
       me -> backing_store_ptr = stacksect.saved_backing_store_ptr;
 #   endif
-    me -> thread_blocked = TRUE;
-#   ifndef GC_DARWIN_THREADS
-      me -> stop_info.stack_ptr = stacksect.saved_stack_ptr;
-#   endif
+    me -> thread_blocked = (unsigned char)TRUE;
+    me -> stop_info.stack_ptr = stacksect.saved_stack_ptr;
     UNLOCK();
 
     return client_data; /* result */
