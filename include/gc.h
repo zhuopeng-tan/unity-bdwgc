@@ -28,6 +28,24 @@
  * problems.
  */
 
+#define REDIRECT_MALLOC		GC_MALLOC_UNCOLLECTABLE
+#define REDIRECT_FREE		GC_FREE
+#define REDIRECT_REALLOC	GC_REALLOC
+
+// the only mode that i support atm
+//  so hardcode it here, no point in making it configurable
+#define GC_DLL
+#define GC_WIN32_THREADS
+// lets provide the equivalent of system's malloc()
+// this is useful if we force-include the gc but hack other libs
+//  to be a bit more gc-aware
+#define ATOMIC_UNCOLLECTABLE
+
+// help debug mixed up preproc symbols
+#if (defined(WIN64) && !defined(_WIN64))
+#pragma message("Warning: Expecting _WIN64 for x64 targets! Notice the leading underscore!")
+#endif
+
 #ifndef GC_H
 #define GC_H
 
@@ -1232,11 +1250,40 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #     include <process.h> /* For _beginthreadex, _endthreadex */
 #   endif
 
-#   include <windows.h>
 
 #   ifdef __cplusplus
       extern "C" {
 #   endif
+
+#ifdef GC_BUILD
+#   include <windows.h>
+#else
+		  // copied from various windows header files
+		typedef void			*HANDLE;
+		#define WINAPI			__stdcall
+		typedef unsigned long	DWORD;
+		typedef DWORD			*LPDWORD;
+		typedef int				BOOL;
+		#if defined(_WIN64)
+			typedef unsigned __int64 ULONG_PTR;
+		#else
+			typedef unsigned long ULONG_PTR;
+		#endif
+		typedef ULONG_PTR SIZE_T;
+
+		struct _SECURITY_ATTRIBUTES;
+		typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(void* lpThreadParameter);
+
+		__declspec(dllimport) HANDLE WINAPI CreateThread(
+				struct _SECURITY_ATTRIBUTES* lpThreadAttributes, 
+				SIZE_T dwStackSize,
+				PTHREAD_START_ROUTINE lpStartAddress, 
+				void* lpParameter, 
+				DWORD dwCreationFlags, 
+				DWORD* lpThreadId);
+
+		__declspec(dllimport) __declspec(noreturn) void WINAPI ExitThread(DWORD dwExitCode);
+#endif
 
 #   ifdef GC_UNDERSCORE_STDCALL
       /* Explicitly prefix exported/imported WINAPI (__stdcall) symbols */
@@ -1256,15 +1303,15 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
     /* terminate normally, or call GC_endthreadex() or GC_ExitThread,   */
     /* so that the thread is properly unregistered.                     */
     GC_API HANDLE WINAPI GC_CreateThread(
-                LPSECURITY_ATTRIBUTES /* lpThreadAttributes */,
-                DWORD /* dwStackSize */,
-                LPTHREAD_START_ROUTINE /* lpStartAddress */,
-                LPVOID /* lpParameter */, DWORD /* dwCreationFlags */,
+                struct _SECURITY_ATTRIBUTES* /* lpThreadAttributes */,
+                SIZE_T /* dwStackSize */,
+                PTHREAD_START_ROUTINE /* lpStartAddress */,
+                void* /* lpParameter */, DWORD /* dwCreationFlags */,
                 LPDWORD /* lpThreadId */);
 
 #   ifndef DECLSPEC_NORETURN
       /* Typically defined in winnt.h. */
-#     define DECLSPEC_NORETURN /* empty */
+#     define DECLSPEC_NORETURN  __declspec(noreturn)
 #   endif
 
     GC_API DECLSPEC_NORETURN void WINAPI GC_ExitThread(
@@ -1312,6 +1359,25 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 # endif /* !GC_NO_THREAD_REDIRECTS */
 
 #endif /* GC_WIN32_THREADS */
+
+#ifdef REDIRECT_MALLOC
+// all the functions we redirect here need to have their header included
+//  prior to macro def-ing! otherwise the headers will be included after gc.h has
+//  been force-included and then we have two clashing symbols!
+#include <stdlib.h>
+#include <string.h>
+#ifdef __cplusplus
+#include <cstdlib>
+#include <cstring>
+#endif // __cplusplus
+#ifndef GC_BUILD
+#define free				REDIRECT_FREE 
+#define malloc				REDIRECT_MALLOC
+#define calloc(n, lb)		REDIRECT_MALLOC((n) * (lb))
+#define realloc(p, lb)		REDIRECT_REALLOC((p), (lb))
+#define strdup				GC_STRDUP
+#endif // GC_BUILD
+#endif // REDIRECT_MALLOC
 
 /* Public setter and getter for switching "unmap as much as possible"   */
 /* mode on(1) and off(0).  Has no effect unless unmapping is turned on. */
@@ -1449,3 +1515,8 @@ GC_API void GC_CALL GC_win32_free_heap(void);
 #endif
 
 #endif /* GC_H */
+
+
+#ifdef __cplusplus
+#include "gc_cpp.h"
+#endif

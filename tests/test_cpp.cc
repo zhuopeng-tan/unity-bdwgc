@@ -187,7 +187,7 @@ GC_word Disguise( void* p ) {
 void* Undisguise( GC_word i ) {
     return (void*) ~ i;}
 
-#ifdef MSWIN32
+#if 0//def MSWIN32
 int APIENTRY WinMain(
     HINSTANCE instance, HINSTANCE prev, LPSTR cmd, int cmdShow )
 {

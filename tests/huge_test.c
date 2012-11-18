@@ -28,7 +28,8 @@ int main(void)
         /* That's OK.  We test this corner case mostly to make sure that  */
         /* it fails predictably.                                          */
     GC_expand_hp(1024*1024*5);
-    if (sizeof(long) == sizeof(void *)) {
+//  if (sizeof(long) == sizeof(void *)) 
+	{
         void *r = GC_MALLOC(LONG_MAX-1024);
         if (0 != r) {
             fprintf(stderr,

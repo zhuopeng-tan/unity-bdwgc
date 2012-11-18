@@ -2662,9 +2662,10 @@
 # error "One of STACK_GROWS_UP and STACK_GROWS_DOWN should be defd."
 #endif
 
-#if defined(REDIRECT_MALLOC) && defined(THREADS) && !defined(LINUX)
-# error "REDIRECT_MALLOC with THREADS works at most on Linux."
-#endif
+# if defined(REDIRECT_MALLOC) && defined(THREADS) && !defined(LINUX)
+// FIXME: no idea if this is really true!
+//#   error "REDIRECT_MALLOC with THREADS works at most on Linux."
+# endif
 
 #ifdef GC_PRIVATE_H
         /* This relies on some type definitions from gc_priv.h, from    */
