@@ -170,16 +170,16 @@ by UseGC.  GC is an alias for UseGC, unless GC_NAME_CONFLICT is defined.
 #  define GC_PLACEMENT_DELETE
 #endif
 
-enum GCPlacement 
+enum GCPlacement
 {
-	UseGC,
+    UseGC,
 #ifndef GC_NAME_CONFLICT
-	GC=UseGC,
+    GC=UseGC,
 #endif
-	NoGC, 
-	PointerFreeGC,
-	PointerFreeNoGC,
-	NoGCPointerFree = PointerFreeNoGC
+    NoGC,
+    PointerFreeGC,
+    PointerFreeNoGC,
+    NoGCPointerFree = PointerFreeNoGC
 };
 
 class gc {public:
@@ -272,20 +272,20 @@ inline void operator delete[]( void* obj ) {
 
 #endif
 
- 
+
 // void* operator new( size_t size);
 // void operator delete(void* obj);
 
-	// MOVED HERE FROM gc_hpp.cc!
-	inline void* operator new(size_t size) 
-	{
-		return GC_MALLOC_UNCOLLECTABLE(size);
-	}
+    // MOVED HERE FROM gc_hpp.cc!
+    inline void* operator new(size_t size)
+    {
+        return GC_MALLOC_UNCOLLECTABLE(size);
+    }
 
-	inline void operator delete(void* obj) 
-	{
-		GC_FREE(obj);
-	}
+    inline void operator delete(void* obj)
+    {
+        GC_FREE(obj);
+    }
 
 
  // This new operator is used by VC++ in case of Debug builds !
@@ -293,13 +293,13 @@ _Ret_bytecap_(_Size) inline void* operator new(  size_t size,
                       int ,//nBlockUse,
                       const char * szFileName,
                       int nLine )
-	{
+    {
 #ifndef GC_DEBUG
-	        return GC_malloc_uncollectable( size );
+            return GC_malloc_uncollectable( size );
 #else
-		    return GC_debug_malloc_uncollectable(size, szFileName, nLine);
+            return GC_debug_malloc_uncollectable(size, szFileName, nLine);
 #endif
-	}
+    }
 _Ret_bytecap_(_Size) inline void* operator new[](size_t size, int nBlockUse, const char* szFileName, int nLine)
 {
     return operator new(size, nBlockUse, szFileName, nLine);
@@ -328,20 +328,20 @@ Inline implementation
 inline void* gc::operator new( size_t size ) {
     return GC_MALLOC( size );}
 
-inline void* gc::operator new( size_t size, GCPlacement gcp ) 
+inline void* gc::operator new( size_t size, GCPlacement gcp )
 {
-	switch (gcp)
-	{
-		case UseGC:
-			return GC_MALLOC( size );
-		case PointerFreeGC:
-			return GC_MALLOC_ATOMIC( size );
-		case PointerFreeNoGC:
-			return GC_MALLOC_ATOMIC_UNCOLLECTABLE( size );
-		case NoGC:
-		default:
-			return GC_MALLOC_UNCOLLECTABLE( size );
-	}
+    switch (gcp)
+    {
+        case UseGC:
+            return GC_MALLOC( size );
+        case PointerFreeGC:
+            return GC_MALLOC_ATOMIC( size );
+        case PointerFreeNoGC:
+            return GC_MALLOC_ATOMIC_UNCOLLECTABLE( size );
+        case NoGC:
+        default:
+            return GC_MALLOC_UNCOLLECTABLE( size );
+    }
 }
 
 inline void* gc::operator new( size_t size, void *p ) {
@@ -405,27 +405,27 @@ inline void* operator new(
 {
     void* obj;
 
-    if (gcp == UseGC) 
-	{
+    if (gcp == UseGC)
+    {
         obj = GC_MALLOC( size );
         if (cleanup != 0)
             GC_REGISTER_FINALIZER_IGNORE_SELF(
                 obj, cleanup, clientData, 0, 0 );
-	}
-    else 
-	if (gcp == PointerFreeGC) 
-	{
+    }
+    else
+    if (gcp == PointerFreeGC)
+    {
         obj = GC_MALLOC_ATOMIC( size );
-	}
-	else
-	if (gcp == PointerFreeNoGC)
-	{
-		obj = GC_MALLOC_ATOMIC_UNCOLLECTABLE( size );
-	}
-    else 
-	{
+    }
+    else
+    if (gcp == PointerFreeNoGC)
+    {
+        obj = GC_MALLOC_ATOMIC_UNCOLLECTABLE( size );
+    }
+    else
+    {
         obj = GC_MALLOC_UNCOLLECTABLE( size );
-	}
+    }
 
     return obj;
 }
@@ -455,10 +455,10 @@ inline void* operator new(
 // oooohh... big hack (mainly for vnl which explicitly references mem-stuff via std namespace)
 namespace std
 {
-	using ::GC_debug_malloc_uncollectable;
-	using ::GC_debug_realloc;
-	using ::GC_realloc;
-	using ::GC_malloc_uncollectable;
+    using ::GC_debug_malloc_uncollectable;
+    using ::GC_debug_realloc;
+    using ::GC_realloc;
+    using ::GC_malloc_uncollectable;
 }
 #if defined(__CYGWIN__)
 # include <new> // for delete throw()

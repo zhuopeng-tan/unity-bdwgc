@@ -28,9 +28,9 @@
  * problems.
  */
 
-#define REDIRECT_MALLOC		GC_MALLOC_UNCOLLECTABLE
-#define REDIRECT_FREE		GC_FREE
-#define REDIRECT_REALLOC	GC_REALLOC
+#define REDIRECT_MALLOC     GC_MALLOC_UNCOLLECTABLE
+#define REDIRECT_FREE       GC_FREE
+#define REDIRECT_REALLOC    GC_REALLOC
 
 // the only mode that i support atm
 //  so hardcode it here, no point in making it configurable
@@ -1258,31 +1258,31 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #ifdef GC_BUILD
 #   include <windows.h>
 #else
-		  // copied from various windows header files
-		typedef void			*HANDLE;
-		#define WINAPI			__stdcall
-		typedef unsigned long	DWORD;
-		typedef DWORD			*LPDWORD;
-		typedef int				BOOL;
-		#if defined(_WIN64)
-			typedef unsigned __int64 ULONG_PTR;
-		#else
-			typedef unsigned long ULONG_PTR;
-		#endif
-		typedef ULONG_PTR SIZE_T;
+          // copied from various windows header files
+        typedef void            *HANDLE;
+        #define WINAPI          __stdcall
+        typedef unsigned long   DWORD;
+        typedef DWORD           *LPDWORD;
+        typedef int             BOOL;
+        #if defined(_WIN64)
+            typedef unsigned __int64 ULONG_PTR;
+        #else
+            typedef unsigned long ULONG_PTR;
+        #endif
+        typedef ULONG_PTR SIZE_T;
 
-		struct _SECURITY_ATTRIBUTES;
-		typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(void* lpThreadParameter);
+        struct _SECURITY_ATTRIBUTES;
+        typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(void* lpThreadParameter);
 
-		__declspec(dllimport) HANDLE WINAPI CreateThread(
-				struct _SECURITY_ATTRIBUTES* lpThreadAttributes, 
-				SIZE_T dwStackSize,
-				PTHREAD_START_ROUTINE lpStartAddress, 
-				void* lpParameter, 
-				DWORD dwCreationFlags, 
-				DWORD* lpThreadId);
+        __declspec(dllimport) HANDLE WINAPI CreateThread(
+                struct _SECURITY_ATTRIBUTES* lpThreadAttributes,
+                SIZE_T dwStackSize,
+                PTHREAD_START_ROUTINE lpStartAddress,
+                void* lpParameter,
+                DWORD dwCreationFlags,
+                DWORD* lpThreadId);
 
-		__declspec(dllimport) __declspec(noreturn) void WINAPI ExitThread(DWORD dwExitCode);
+        __declspec(dllimport) __declspec(noreturn) void WINAPI ExitThread(DWORD dwExitCode);
 #endif
 
 #   ifdef GC_UNDERSCORE_STDCALL
@@ -1371,11 +1371,11 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #include <cstring>
 #endif // __cplusplus
 #ifndef GC_BUILD
-#define free				REDIRECT_FREE 
-#define malloc				REDIRECT_MALLOC
-#define calloc(n, lb)		REDIRECT_MALLOC((n) * (lb))
-#define realloc(p, lb)		REDIRECT_REALLOC((p), (lb))
-#define strdup				GC_STRDUP
+#define free                REDIRECT_FREE
+#define malloc              REDIRECT_MALLOC
+#define calloc(n, lb)       REDIRECT_MALLOC((n) * (lb))
+#define realloc(p, lb)      REDIRECT_REALLOC((p), (lb))
+#define strdup              GC_STRDUP
 #endif // GC_BUILD
 #endif // REDIRECT_MALLOC
 

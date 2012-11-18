@@ -156,11 +156,11 @@ GC_API void GC_CALL GC_use_threads_discovery(void)
     ABORT("GC DllMain-based thread registration unsupported");
 # else
     /* Turn on GC_win32_dll_threads. */
-	// we dont need this assert here
-	// GC_init_parallel() does nothing if parallel_initialized==true
-	// also it breaks calling GC_use_DllMain() from DllMain()
-	//  (because it gets called many times, during startup and shutdown)
-//	GC_ASSERT(!parallel_initialized);
+    // we dont need this assert here
+    // GC_init_parallel() does nothing if parallel_initialized==true
+    // also it breaks calling GC_use_DllMain() from DllMain()
+    //  (because it gets called many times, during startup and shutdown)
+//  GC_ASSERT(!parallel_initialized);
 
 #   ifndef GC_DISCOVER_TASK_THREADS
       GC_win32_dll_threads = TRUE;
@@ -2585,9 +2585,9 @@ GC_INNER void GC_thr_init(void)
 #     endif
       static int entry_count = 0;
 
-	  // despite the comment above
-	  //  this seems to work fine...
-	  GC_use_threads_discovery();
+      // despite the comment above
+      //  this seems to work fine...
+      GC_use_threads_discovery();
 
       if (!GC_win32_dll_threads && parallel_initialized) return TRUE;
 
