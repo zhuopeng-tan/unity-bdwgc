@@ -31,6 +31,7 @@
 #define REDIRECT_MALLOC     GC_MALLOC_UNCOLLECTABLE
 #define REDIRECT_FREE       GC_FREE
 #define REDIRECT_REALLOC    GC_REALLOC
+#define REDIRECT_MALLOC_IN_HEADER
 
 // the only mode that i support atm
 //  so hardcode it here, no point in making it configurable

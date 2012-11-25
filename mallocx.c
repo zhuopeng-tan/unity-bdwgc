@@ -157,7 +157,7 @@ GC_API void * GC_CALL GC_realloc(void * p, size_t lb)
 # define GC_debug_realloc_replacement(p, lb) \
         GC_debug_realloc(p, lb, GC_DBG_RA "unknown", 0)
 
-#if 0
+#if !defined(REDIRECT_MALLOC_IN_HEADER)
 void * realloc(void * p, size_t lb)
   {
     return(REDIRECT_REALLOC(p, lb));

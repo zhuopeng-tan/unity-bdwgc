@@ -327,7 +327,7 @@ GC_API void * GC_CALL GC_malloc_uncollectable(size_t lb)
 # define GC_debug_malloc_replacement(lb) \
                         GC_debug_malloc(lb, GC_DBG_RA "unknown", 0)
 
-#if 0
+#if !defined(REDIRECT_MALLOC_IN_HEADER)
 void * malloc(size_t lb)
 {
     /* It might help to manually inline the GC_malloc call here.        */
@@ -371,7 +371,7 @@ void * malloc(size_t lb)
   }
 #endif /* GC_LINUX_THREADS */
 
-#if 0
+#if !defined(REDIRECT_MALLOC_IN_HEADER)
 void * calloc(size_t n, size_t lb)
 {
 #   if defined(GC_LINUX_THREADS) /* && !defined(USE_PROC_FOR_LIBRARIES) */
@@ -395,9 +395,7 @@ void * calloc(size_t n, size_t lb)
 #   endif
     return((void *)REDIRECT_MALLOC(n*lb));
 }
-#endif
 
-#if 0
 #ifndef strdup
   char *strdup(const char *s)
   {
@@ -414,7 +412,6 @@ void * calloc(size_t n, size_t lb)
  /* If strdup is macro defined, we assume that it actually calls malloc, */
  /* and thus the right thing will happen even without overriding it.     */
  /* This seems to be true on most Linux systems.                         */
-#endif
 
 #ifndef strndup
   /* This is similar to strdup().       */
@@ -434,6 +431,8 @@ void * calloc(size_t n, size_t lb)
     return copy;
   }
 #endif /* !strndup */
+
+#endif /* !REDIRECT_MALLOC_IN_HEADER */
 
 #undef GC_debug_malloc_replacement
 
@@ -545,7 +544,7 @@ GC_API void GC_CALL GC_free(void * p)
 # define REDIRECT_FREE GC_free
 #endif
 
-#if 0//def REDIRECT_FREE
+#if defined(REDIRECT_FREE) && !defined(REDIRECT_MALLOC_IN_HEADER)
   void free(void * p)
   {
 #   if defined(GC_LINUX_THREADS) && !defined(USE_PROC_FOR_LIBRARIES)
