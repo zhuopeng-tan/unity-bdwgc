@@ -232,7 +232,7 @@ GC_API void GC_CALL GC_set_handle_fork(int value GC_ATTR_UNUSED)
 /* quantization algorithm (but we precompute it).                       */
 STATIC void GC_init_size_map(void)
 {
-    int i;
+    size_t i;
 
     /* Map size 0 to something bigger.                  */
     /* This avoids problems at lower levels.            */
@@ -370,7 +370,7 @@ GC_API void * GC_CALL GC_clear_stack(void *arg)
         /* clearing near the cold end of the stack, a good thing.       */
 #   define GC_SLOP 4000
         /* We make GC_high_water this much hotter than we really saw    */
-        /* saw it, to cover for GC noise etc. above our current frame.  */
+        /* it, to cover for GC noise etc. above our current frame.      */
 #   define CLEAR_THRESHOLD 100000
         /* We restart the clearing process after this many bytes of     */
         /* allocation.  Otherwise very heavily recursive programs       */
@@ -687,7 +687,7 @@ GC_API void GC_CALL GC_get_heap_usage_safe(GC_word *pheap_size,
       }
       /* At this execution point, GC_setpagesize() and GC_init_win32()  */
       /* must already be called (for GET_MEM() to work correctly).      */
-      content = (char *)GET_MEM(len + 1);
+      content = (char *)GET_MEM(ROUNDUP_PAGESIZE_IF_MMAP((size_t)len + 1));
       if (content == NULL) {
         CloseHandle(hFile);
         return; /* allocation failure */
@@ -846,9 +846,9 @@ GC_API void GC_CALL GC_init(void)
 #   endif
 
 #   ifdef GC_INITIAL_HEAP_SIZE
-      initial_heap_sz = divHBLKSZ(GC_INITIAL_HEAP_SIZE);
+      initial_heap_sz = GC_INITIAL_HEAP_SIZE;
 #   else
-      initial_heap_sz = (word)MINHINCR;
+      initial_heap_sz = MINHINCR * HBLKSIZE;
 #   endif
     DISABLE_CANCEL(cancel_state);
     /* Note that although we are nominally called with the */
@@ -862,9 +862,14 @@ GC_API void GC_CALL GC_init(void)
 #     ifdef SN_TARGET_PS3
         {
           pthread_mutexattr_t mattr;
-          pthread_mutexattr_init(&mattr);
-          pthread_mutex_init(&GC_allocate_ml, &mattr);
-          pthread_mutexattr_destroy(&mattr);
+
+          if (0 != pthread_mutexattr_init(&mattr)) {
+            ABORT("pthread_mutexattr_init failed");
+          }
+          if (0 != pthread_mutex_init(&GC_allocate_ml, &mattr)) {
+            ABORT("pthread_mutex_init failed");
+          }
+          (void)pthread_mutexattr_destroy(&mattr);
         }
 #     endif
 #   endif /* THREADS */
@@ -1165,21 +1170,20 @@ GC_API void GC_CALL GC_init(void)
           if (initial_heap_sz <= MINHINCR * HBLKSIZE) {
             WARN("Bad initial heap size %s - ignoring it.\n", sz_str);
           }
-          initial_heap_sz = divHBLKSZ(initial_heap_sz);
         }
     }
     {
         char * sz_str = GETENV("GC_MAXIMUM_HEAP_SIZE");
         if (sz_str != NULL) {
           word max_heap_sz = GC_parse_mem_size_arg(sz_str);
-          if (max_heap_sz < initial_heap_sz * HBLKSIZE) {
+          if (max_heap_sz < initial_heap_sz) {
             WARN("Bad maximum heap size %s - ignoring it.\n", sz_str);
           }
           if (0 == GC_max_retries) GC_max_retries = 2;
           GC_set_max_heap_size(max_heap_sz);
         }
     }
-    if (!GC_expand_hp_inner(initial_heap_sz)) {
+    if (!GC_expand_hp_inner(divHBLKSZ(initial_heap_sz))) {
         GC_err_printf("Can't start up: not enough memory\n");
         EXIT();
     } else {
@@ -1622,8 +1626,8 @@ GC_API void GC_CALL GC_enable_incremental(void)
 
 #define BUFSZ 1024
 
-#ifdef NO_VSNPRINTF
-  /* In case this function is missing (eg., in DJGPP v2.0.3).   */
+#if defined(DJGPP) || defined(__STRICT_ANSI__)
+  /* vsnprintf is missing in DJGPP (v2.0.3) */
 # define GC_VSNPRINTF(buf, bufsz, format, args) vsprintf(buf, format, args)
 #elif defined(_MSC_VER)
 # ifdef MSWINCE
@@ -1737,7 +1741,7 @@ GC_API void GC_CALLBACK GC_ignore_warn_proc(char *msg, GC_word arg)
 GC_API void GC_CALL GC_set_warn_proc(GC_warn_proc p)
 {
     DCL_LOCK_STATE;
-    GC_ASSERT(p != 0);
+    GC_ASSERT(NONNULL_ARG_NOT_NULL(p));
 #   ifdef GC_WIN32_THREADS
 #     ifdef CYGWIN32
         /* Need explicit GC_INIT call */
@@ -1825,7 +1829,7 @@ GC_API GC_warn_proc GC_CALL GC_get_warn_proc(void)
   GC_API void GC_CALL GC_set_abort_func(GC_abort_func fn)
   {
       DCL_LOCK_STATE;
-      GC_ASSERT(fn != 0);
+      GC_ASSERT(NONNULL_ARG_NOT_NULL(fn));
       LOCK();
       GC_on_abort = fn;
       UNLOCK();
@@ -1888,18 +1892,22 @@ GC_API void ** GC_CALL GC_new_free_list(void)
 GC_API unsigned GC_CALL GC_new_kind_inner(void **fl, GC_word descr,
                                           int adjust, int clear)
 {
-    unsigned result = GC_n_kinds++;
+    unsigned result = GC_n_kinds;
 
-    if (GC_n_kinds > MAXOBJKINDS) ABORT("Too many kinds");
-    GC_obj_kinds[result].ok_freelist = fl;
-    GC_obj_kinds[result].ok_reclaim_list = 0;
-    GC_obj_kinds[result].ok_descriptor = descr;
-    GC_obj_kinds[result].ok_relocate_descr = adjust;
-    GC_obj_kinds[result].ok_init = clear;
-#   ifdef ENABLE_DISCLAIM
+    if (result < MAXOBJKINDS) {
+      GC_n_kinds++;
+      GC_obj_kinds[result].ok_freelist = fl;
+      GC_obj_kinds[result].ok_reclaim_list = 0;
+      GC_obj_kinds[result].ok_descriptor = descr;
+      GC_obj_kinds[result].ok_relocate_descr = adjust;
+      GC_obj_kinds[result].ok_init = (GC_bool)clear;
+#     ifdef ENABLE_DISCLAIM
         GC_obj_kinds[result].ok_mark_unconditionally = FALSE;
         GC_obj_kinds[result].ok_disclaim_proc = 0;
-#   endif
+#     endif
+    } else {
+      ABORT("Too many kinds");
+    }
     return result;
 }
 
@@ -1916,10 +1924,14 @@ GC_API unsigned GC_CALL GC_new_kind(void **fl, GC_word descr, int adjust,
 
 GC_API unsigned GC_CALL GC_new_proc_inner(GC_mark_proc proc)
 {
-    unsigned result = GC_n_mark_procs++;
+    unsigned result = GC_n_mark_procs;
 
-    if (GC_n_mark_procs > MAX_MARK_PROCS) ABORT("Too many mark procedures");
-    GC_mark_procs[result] = proc;
+    if (result < MAX_MARK_PROCS) {
+      GC_n_mark_procs++;
+      GC_mark_procs[result] = proc;
+    } else {
+      ABORT("Too many mark procedures");
+    }
     return result;
 }
 
@@ -2107,7 +2119,7 @@ GC_API GC_word GC_CALL GC_get_gc_no(void)
 
 GC_API void GC_CALL GC_set_oom_fn(GC_oom_func fn)
 {
-    GC_ASSERT(fn != 0);
+    GC_ASSERT(NONNULL_ARG_NOT_NULL(fn));
     DCL_LOCK_STATE;
     LOCK();
     GC_oom_fn = fn;

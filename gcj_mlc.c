@@ -101,7 +101,7 @@ GC_API void GC_CALL GC_init_gcj_malloc(int mp_index,
         /* Use a simple length-based descriptor, thus forcing a fully   */
         /* conservative scan.                                           */
         GC_gcj_kind = GC_new_kind_inner((void **)GC_gcjobjfreelist,
-                                        (0 | GC_DS_LENGTH),
+                                        /* 0 | */ GC_DS_LENGTH,
                                         TRUE, TRUE);
       } else {
         GC_gcj_kind = GC_new_kind_inner(
@@ -159,7 +159,7 @@ static void maybe_finalize(void)
   GC_INNER void * GC_core_gcj_malloc(size_t lb,
                                      void * ptr_to_struct_containing_descr)
 #else
-  GC_API void * GC_CALL GC_gcj_malloc(size_t lb,
+  GC_API GC_ATTR_MALLOC void * GC_CALL GC_gcj_malloc(size_t lb,
                                       void * ptr_to_struct_containing_descr)
 #endif
 {
@@ -206,7 +206,7 @@ static void maybe_finalize(void)
 
 /* Similar to GC_gcj_malloc, but add debug info.  This is allocated     */
 /* with GC_gcj_debug_kind.                                              */
-GC_API void * GC_CALL GC_debug_gcj_malloc(size_t lb,
+GC_API GC_ATTR_MALLOC void * GC_CALL GC_debug_gcj_malloc(size_t lb,
                 void * ptr_to_struct_containing_descr, GC_EXTRA_PARAMS)
 {
     void * result;
@@ -216,7 +216,8 @@ GC_API void * GC_CALL GC_debug_gcj_malloc(size_t lb,
     /* confuse the backtrace.                                   */
     LOCK();
     maybe_finalize();
-    result = GC_generic_malloc_inner(lb + DEBUG_BYTES, GC_gcj_debug_kind);
+    result = GC_generic_malloc_inner(SIZET_SAT_ADD(lb, DEBUG_BYTES),
+                                     GC_gcj_debug_kind);
     if (result == 0) {
         GC_oom_func oom_fn = GC_oom_fn;
         UNLOCK();
@@ -234,7 +235,7 @@ GC_API void * GC_CALL GC_debug_gcj_malloc(size_t lb,
 }
 
 /* There is no THREAD_LOCAL_ALLOC for GC_gcj_malloc_ignore_off_page().  */
-GC_API void * GC_CALL GC_gcj_malloc_ignore_off_page(size_t lb,
+GC_API GC_ATTR_MALLOC void * GC_CALL GC_gcj_malloc_ignore_off_page(size_t lb,
                                      void * ptr_to_struct_containing_descr)
 {
     ptr_t op;

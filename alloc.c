@@ -149,7 +149,7 @@ STATIC GC_stop_func GC_default_stop_func = GC_never_stop_func;
 GC_API void GC_CALL GC_set_stop_func(GC_stop_func stop_func)
 {
   DCL_LOCK_STATE;
-  GC_ASSERT(stop_func != 0);
+  GC_ASSERT(NONNULL_ARG_NOT_NULL(stop_func));
   LOCK();
   GC_default_stop_func = stop_func;
   UNLOCK();
@@ -1018,7 +1018,7 @@ STATIC GC_bool GC_try_to_collect_general(GC_stop_func stop_func,
 /* Externally callable routines to invoke full, stop-the-world collection. */
 GC_API int GC_CALL GC_try_to_collect(GC_stop_func stop_func)
 {
-    GC_ASSERT(stop_func != 0);
+    GC_ASSERT(NONNULL_ARG_NOT_NULL(stop_func));
     return (int)GC_try_to_collect_general(stop_func, FALSE);
 }
 
@@ -1097,6 +1097,16 @@ GC_INNER void GC_add_to_heap(struct hblk *p, size_t bytes)
     phdr -> hb_flags = 0;
     GC_freehblk(p);
     GC_heapsize += bytes;
+
+    /* Normally the caller calculates a new GC_collect_at_heapsize,
+     * but this is also called directly from alloc_mark_stack, so
+     * adjust here. It will be recalculated when called from
+     * GC_expand_hp_inner.
+     */
+    GC_collect_at_heapsize += bytes;
+    if (GC_collect_at_heapsize < GC_heapsize /* wrapped */)
+       GC_collect_at_heapsize = (word)(-1);
+
     if ((word)p <= (word)GC_least_plausible_heap_addr
         || GC_least_plausible_heap_addr == 0) {
         GC_least_plausible_heap_addr = (void *)((ptr_t)p - sizeof(word));
@@ -1163,32 +1173,28 @@ GC_word GC_max_retries = 0;
 /* Returns FALSE on failure.                                            */
 GC_INNER GC_bool GC_expand_hp_inner(word n)
 {
-    word bytes;
+    size_t bytes;
     struct hblk * space;
     word expansion_slop;        /* Number of bytes by which we expect the */
                                 /* heap to expand soon.                   */
 
     if (n < MINHINCR) n = MINHINCR;
-    bytes = n * HBLKSIZE;
-    /* Make sure bytes is a multiple of GC_page_size */
-      {
-        word mask = GC_page_size - 1;
-        bytes += mask;
-        bytes &= ~mask;
-      }
-
-    if (GC_max_heapsize != 0 && GC_heapsize + bytes > GC_max_heapsize) {
+    bytes = ROUNDUP_PAGESIZE((size_t)n * HBLKSIZE);
+    if (GC_max_heapsize != 0
+        && (GC_max_heapsize < (word)bytes
+            || GC_heapsize > GC_max_heapsize - (word)bytes)) {
         /* Exceeded self-imposed limit */
         return(FALSE);
     }
     space = GET_MEM(bytes);
     GC_add_to_our_memory((ptr_t)space, bytes);
     if (space == 0) {
-        WARN("Failed to expand heap by %" WARN_PRIdPTR " bytes\n", bytes);
+        WARN("Failed to expand heap by %" WARN_PRIdPTR " bytes\n",
+             (word)bytes);
         return(FALSE);
     }
     GC_INFOLOG_PRINTF("Grow heap to %lu KiB after %lu bytes allocated\n",
-                      TO_KiB_UL(GC_heapsize + bytes),
+                      TO_KiB_UL(GC_heapsize + (word)bytes),
                       (unsigned long)GC_bytes_allocd);
     /* Adjust heap limits generously for blacklisting to work better.   */
     /* GC_add_to_heap performs minimal adjustment needed for            */
@@ -1198,7 +1204,7 @@ GC_INNER GC_bool GC_expand_hp_inner(word n)
         || (GC_last_heap_addr != 0
             && (word)GC_last_heap_addr < (word)space)) {
         /* Assume the heap is growing up */
-        word new_limit = (word)space + bytes + expansion_slop;
+        word new_limit = (word)space + (word)bytes + expansion_slop;
         if (new_limit > (word)space) {
           GC_greatest_plausible_heap_addr =
             (void *)GC_max((word)GC_greatest_plausible_heap_addr,
@@ -1251,9 +1257,11 @@ GC_INNER unsigned GC_fail_count = 0;
 static word last_fo_entries = 0;
 static word last_bytes_finalized = 0;
 
+#define GC_WORD_MAX (~(word)0)
+
 /* Collect or expand heap in an attempt make the indicated number of    */
 /* free blocks available.  Should be called until the blocks are        */
-/* available (seting retry value to TRUE unless this is the first call  */
+/* available (setting retry value to TRUE unless this is the first call */
 /* in a loop) or until it fails by returning FALSE.                     */
 GC_INNER GC_bool GC_collect_or_expand(word needed_blocks,
                                       GC_bool ignore_off_page,
@@ -1304,6 +1312,8 @@ GC_INNER GC_bool GC_collect_or_expand(word needed_blocks,
       } else {
         blocks_to_get = MAXHINCR;
       }
+      if (blocks_to_get > divHBLKSZ(GC_WORD_MAX))
+        blocks_to_get = divHBLKSZ(GC_WORD_MAX);
     }
 
     if (!GC_expand_hp_inner(blocks_to_get)
@@ -1313,7 +1323,7 @@ GC_INNER GC_bool GC_collect_or_expand(word needed_blocks,
         GC_gcollect_inner();
         GC_ASSERT(GC_bytes_allocd == 0);
       } else if (GC_fail_count++ < GC_max_retries) {
-        WARN("Out of Memory!  Trying to continue ...\n", 0);
+        WARN("Out of Memory!  Trying to continue...\n", 0);
         GC_gcollect_inner();
       } else {
 #       if !defined(AMIGA) || !defined(GC_AMIGA_FASTALLOC)

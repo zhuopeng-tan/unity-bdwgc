@@ -513,7 +513,7 @@ STATIC struct hblk * GC_get_first_part(struct hblk *h, hdr *hhdr,
     rest_hdr = GC_install_header(rest);
     if (0 == rest_hdr) {
         /* FIXME: This is likely to be very bad news ... */
-        WARN("Header allocation failed: Dropping block.\n", 0);
+        WARN("Header allocation failed: dropping block\n", 0);
         return(0);
     }
     rest_hdr -> hb_sz = total_size - bytes;
@@ -596,7 +596,7 @@ GC_allochblk(size_t sz, int kind, unsigned flags/* IGNORE_OFF_PAGE or 0 */)
                      /* split.                                          */
 
     GC_ASSERT((sz & (GRANULE_BYTES - 1)) == 0);
-    blocks = OBJ_SZ_TO_BLOCKS(sz);
+    blocks = OBJ_SZ_TO_BLOCKS_CHECKED(sz);
     if ((signed_word)(blocks * HBLKSIZE) < 0) {
       return 0;
     }
@@ -659,7 +659,7 @@ GC_allochblk_nth(size_t sz, int kind, unsigned flags, int n, int may_split)
     signed_word size_needed;    /* number of bytes in requested objects */
     signed_word size_avail;     /* bytes available in this block        */
 
-    size_needed = HBLKSIZE * OBJ_SZ_TO_BLOCKS(sz);
+    size_needed = HBLKSIZE * OBJ_SZ_TO_BLOCKS_CHECKED(sz);
 
     /* search for a big enough block in free list */
         for (hbp = GC_hblkfreelist[n];; hbp = hhdr -> hb_next) {
@@ -734,7 +734,7 @@ GC_allochblk_nth(size_t sz, int kind, unsigned flags, int n, int may_split)
                     >= GC_large_alloc_warn_interval) {
                   WARN("Repeated allocation of very large block "
                        "(appr. size %" WARN_PRIdPTR "):\n"
-                       "\tMay lead to memory leak and poor performance.\n",
+                       "\tMay lead to memory leak and poor performance\n",
                        size_needed);
                   GC_large_alloc_warn_suppressed = 0;
                 }

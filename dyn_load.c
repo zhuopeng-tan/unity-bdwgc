@@ -61,9 +61,8 @@ STATIC GC_has_static_roots_func GC_has_static_roots = 0;
     !(defined(OPENBSD) && (defined(__ELF__) || defined(M68K))) && \
     !(defined(NETBSD) && defined(__ELF__)) && !defined(HURD) && \
     !defined(DARWIN) && !defined(CYGWIN32)
- --> We only know how to find data segments of dynamic libraries for the
- --> above.  Additional SVR4 variants might not be too
- --> hard to add.
+# error We only know how to find data segments of dynamic libraries for above.
+# error Additional SVR4 variants might not be too hard to add.
 #endif
 
 #include <stdio.h>
@@ -109,9 +108,9 @@ STATIC GC_has_static_roots_func GC_has_static_roots = 0;
 #     undef EM_ALPHA
 #   endif
 #   include <link.h>
-#   if !defined(GC_DONT_DEFINE_LINK_MAP)
-      /* link_map and r_debug should be defined explicitly,             */
-      /* as only bionic/linker/linker.h defines them but the header     */
+#   if !defined(GC_DONT_DEFINE_LINK_MAP) && !(__ANDROID_API__ >= 21)
+      /* link_map and r_debug are defined in link.h of NDK r10+.        */
+      /* bionic/linker/linker.h defines them too but the header         */
       /* itself is a C++ one starting from Android 4.3.                 */
       struct link_map {
         uintptr_t l_addr;
@@ -214,7 +213,7 @@ GC_FirstDLOpenedLinkMap(void)
 
 /* Add dynamic library data sections to the root set.           */
 # if !defined(PCR) && !defined(GC_SOLARIS_THREADS) && defined(THREADS)
-        --> fix mutual exclusion with dlopen
+#   error Fix mutual exclusion with dlopen
 # endif
 
 # ifndef USE_PROC_FOR_LIBRARIES
@@ -464,6 +463,7 @@ GC_INNER GC_bool GC_register_main_static_data(void)
     } load_segs[MAX_LOAD_SEGS];
 
     static int n_load_segs;
+    static GC_bool load_segs_overflow;
 # endif /* PT_GNU_RELRO */
 
 STATIC int GC_register_dynlib_callback(struct dl_phdr_info * info,
@@ -479,74 +479,79 @@ STATIC int GC_register_dynlib_callback(struct dl_phdr_info * info,
     return -1;
 
   p = info->dlpi_phdr;
-  for( i = 0; i < (int)info->dlpi_phnum; i++, p++ ) {
-    switch( p->p_type ) {
+  for (i = 0; i < (int)info->dlpi_phnum; i++, p++) {
+    if (p->p_type == PT_LOAD) {
+      GC_has_static_roots_func callback = GC_has_static_roots;
+      if ((p->p_flags & PF_W) == 0) continue;
+
+      start = (ptr_t)p->p_vaddr + info->dlpi_addr;
+      end = start + p->p_memsz;
+      if (callback != 0 && !callback(info->dlpi_name, start, p->p_memsz))
+        continue;
 #     ifdef PT_GNU_RELRO
-        case PT_GNU_RELRO:
-        /* This entry is known to be constant and will eventually be remapped
-           read-only.  However, the address range covered by this entry is
-           typically a subset of a previously encountered "LOAD" segment, so
-           we need to exclude it.  */
-        {
-            int j;
-
-            start = ((ptr_t)(p->p_vaddr)) + info->dlpi_addr;
-            end = start + p->p_memsz;
-            for (j = n_load_segs; --j >= 0; ) {
-              if ((word)start >= (word)load_segs[j].start
-                  && (word)start < (word)load_segs[j].end) {
-                if (load_segs[j].start2 != 0) {
-                  WARN("More than one GNU_RELRO segment per load seg\n",0);
-                } else {
-                  GC_ASSERT((word)end <= (word)load_segs[j].end);
-                  /* Remove from the existing load segment */
-                  load_segs[j].end2 = load_segs[j].end;
-                  load_segs[j].end = start;
-                  load_segs[j].start2 = end;
-                }
-                break;
-              }
-              if (j == 0) WARN("Failed to find PT_GNU_RELRO segment"
-                               " inside PT_LOAD region", 0);
-            }
+#       if CPP_WORDSZ == 64
+          /* TODO: GC_push_all eventually does the correct          */
+          /* rounding to the next multiple of ALIGNMENT, so, most   */
+          /* probably, we should remove the corresponding assertion */
+          /* check in GC_add_roots_inner along with this code line. */
+          /* start pointer value may require aligning */
+          start = (ptr_t)((word)start & ~(sizeof(word) - 1));
+#       endif
+        if (n_load_segs >= MAX_LOAD_SEGS) {
+          if (!load_segs_overflow) {
+            WARN("Too many PT_LOAD segments;"
+                 " registering as roots directly...\n", 0);
+            load_segs_overflow = TRUE;
+          }
+          GC_add_roots_inner(start, end, TRUE);
+        } else {
+          load_segs[n_load_segs].start = start;
+          load_segs[n_load_segs].end = end;
+          load_segs[n_load_segs].start2 = 0;
+          load_segs[n_load_segs].end2 = 0;
+          ++n_load_segs;
         }
-
-        break;
-#     endif
-
-      case PT_LOAD:
-        {
-          GC_has_static_roots_func callback = GC_has_static_roots;
-          if( !(p->p_flags & PF_W) ) break;
-          start = ((char *)(p->p_vaddr)) + info->dlpi_addr;
-          end = start + p->p_memsz;
-
-          if (callback != 0 && !callback(info->dlpi_name, start, p->p_memsz))
-            break;
-#         ifdef PT_GNU_RELRO
-            if (n_load_segs >= MAX_LOAD_SEGS) ABORT("Too many PT_LOAD segs");
-#           if CPP_WORDSZ == 64
-              /* FIXME: GC_push_all eventually does the correct         */
-              /* rounding to the next multiple of ALIGNMENT, so, most   */
-              /* probably, we should remove the corresponding assertion */
-              /* check in GC_add_roots_inner along with this code line. */
-              /* start pointer value may require aligning */
-              start = (ptr_t)((word)start & ~(sizeof(word) - 1));
-#           endif
-            load_segs[n_load_segs].start = start;
-            load_segs[n_load_segs].end = end;
-            load_segs[n_load_segs].start2 = 0;
-            load_segs[n_load_segs].end2 = 0;
-            ++n_load_segs;
-#         else
-            GC_add_roots_inner(start, end, TRUE);
-#         endif /* PT_GNU_RELRO */
-        }
-      break;
-      default:
-        break;
+#     else
+        GC_add_roots_inner(start, end, TRUE);
+#     endif /* !PT_GNU_RELRO */
     }
   }
+
+# ifdef PT_GNU_RELRO
+    p = info->dlpi_phdr;
+    for (i = 0; i < (int)info->dlpi_phnum; i++, p++) {
+      if (p->p_type == PT_GNU_RELRO) {
+        /* This entry is known to be constant and will eventually be    */
+        /* remapped as read-only.  However, the address range covered   */
+        /* by this entry is typically a subset of a previously          */
+        /* encountered "LOAD" segment, so we need to exclude it.        */
+        int j;
+
+        start = (ptr_t)p->p_vaddr + info->dlpi_addr;
+        end = start + p->p_memsz;
+        for (j = n_load_segs; --j >= 0; ) {
+          if ((word)start >= (word)load_segs[j].start
+              && (word)start < (word)load_segs[j].end) {
+            if (load_segs[j].start2 != 0) {
+              WARN("More than one GNU_RELRO segment per load one\n",0);
+            } else {
+              GC_ASSERT((word)end <= (word)load_segs[j].end);
+              /* Remove from the existing load segment */
+              load_segs[j].end2 = load_segs[j].end;
+              load_segs[j].end = start;
+              load_segs[j].start2 = end;
+            }
+            break;
+          }
+          if (0 == j && 0 == GC_has_static_roots)
+            WARN("Failed to find PT_GNU_RELRO segment"
+                 " inside PT_LOAD region\n", 0);
+            /* No warning reported in case of the callback is present   */
+            /* because most likely the segment has been excluded.       */
+        }
+      }
+    }
+# endif
 
   *(int *)ptr = 1;     /* Signal that we were called */
   return 0;
@@ -575,6 +580,7 @@ STATIC GC_bool GC_register_dynamic_libraries_dl_iterate_phdr(void)
     {
       static GC_bool excluded_segs = FALSE;
       n_load_segs = 0;
+      load_segs_overflow = FALSE;
       if (!EXPECT(excluded_segs, TRUE)) {
         GC_exclude_static_roots_inner((ptr_t)load_segs,
                                       (ptr_t)load_segs + sizeof(load_segs));
@@ -677,7 +683,6 @@ extern ElfW(Dyn) _DYNAMIC[];
 STATIC struct link_map *
 GC_FirstDLOpenedLinkMap(void)
 {
-    ElfW(Dyn) *dp;
     static struct link_map *cachedResult = 0;
 
     if (0 == (ptr_t)_DYNAMIC) {
@@ -687,10 +692,19 @@ GC_FirstDLOpenedLinkMap(void)
     if( cachedResult == 0 ) {
 #     if defined(NETBSD) && defined(RTLD_DI_LINKMAP)
         struct link_map *lm = NULL;
-        if (!dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &lm))
-            cachedResult = lm;
+        if (!dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &lm) && lm != NULL) {
+            /* Now lm points link_map object of libgc.  Since it    */
+            /* might not be the first dynamically linked object,    */
+            /* try to find it (object next to the main object).     */
+            while (lm->l_prev != NULL) {
+                lm = lm->l_prev;
+            }
+            cachedResult = lm->l_next;
+        }
 #     else
+        ElfW(Dyn) *dp;
         int tag;
+
         for( dp = _DYNAMIC; (tag = dp->d_tag) != 0; dp++ ) {
             if( tag == DT_DEBUG ) {
                 struct link_map *lm
@@ -1417,12 +1431,13 @@ GC_INNER void GC_init_dyld(void)
      This WILL properly register already linked libraries and libraries
      linked in the future.
   */
-
-  _dyld_register_func_for_add_image(GC_dyld_image_add);
-  _dyld_register_func_for_remove_image(GC_dyld_image_remove);
-      /* Ignore 2 compiler warnings here: passing argument 1 of       */
-      /* '_dyld_register_func_for_add/remove_image' from incompatible */
-      /* pointer type.                                                */
+  _dyld_register_func_for_add_image(
+        (void (*)(const struct mach_header*, intptr_t))GC_dyld_image_add);
+  _dyld_register_func_for_remove_image(
+        (void (*)(const struct mach_header*, intptr_t))GC_dyld_image_remove);
+                        /* Structure mach_header64 has the same fields  */
+                        /* as mach_header except for the reserved one   */
+                        /* at the end, so these casts are OK.           */
 
   /* Set this early to avoid reentrancy issues. */
   initialized = TRUE;

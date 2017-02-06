@@ -26,7 +26,7 @@ unloading shared library.
 #include "gc.h"
 #include "gc_priv.h"
 
-// use 'CODE' resource 0 to get exact location of the beginning of global space.
+/* use 'CODE' resource 0 to get exact location of the beginning of global space. */
 
 typedef struct {
         unsigned long aboveA5;
@@ -35,7 +35,7 @@ typedef struct {
         unsigned long JTOffset;
 } *CodeZeroPtr, **CodeZeroHandle;
 
-void* GC_MacGetDataStart()
+void* GC_MacGetDataStart(void)
 {
         CodeZeroHandle code0 = (CodeZeroHandle)GetResource('CODE', 0);
         if (code0) {
@@ -47,6 +47,8 @@ void* GC_MacGetDataStart()
         exit(-1);
         return 0;
 }
+
+#ifdef USE_TEMPORARY_MEMORY
 
 /* track the use of temporary memory so it can be freed all at once. */
 
@@ -76,13 +78,13 @@ Ptr GC_MacTemporaryNewPtr(size_t size, Boolean clearMemory)
                 if (clearMemory) memset(tempPtr, 0, size);
                 tempPtr = StripAddress(tempPtr);
 
-                // keep track of the allocated blocks.
+                /* keep track of the allocated blocks. */
                 (**tempMemBlock).nextBlock = theTemporaryMemory;
                 theTemporaryMemory = tempMemBlock;
         }
 
 #     if !defined(SHARED_LIBRARY_BUILD)
-        // install an exit routine to clean up the memory used at the end.
+        /* install an exit routine to clean up the memory used at the end. */
         if (firstTime) {
                 atexit(&GC_MacFreeTemporaryMemory);
                 firstTime = false;
@@ -94,7 +96,7 @@ Ptr GC_MacTemporaryNewPtr(size_t size, Boolean clearMemory)
 
 extern word GC_fo_entries;
 
-static void perform_final_collection()
+static void perform_final_collection(void)
 {
   unsigned i;
   word last_fo_entries = 0;
@@ -111,7 +113,7 @@ static void perform_final_collection()
 }
 
 
-void GC_MacFreeTemporaryMemory()
+void GC_MacFreeTemporaryMemory(void)
 {
 # if defined(SHARED_LIBRARY_BUILD)
     /* if possible, collect all memory, and invoke all finalizers. */
@@ -133,15 +135,18 @@ void GC_MacFreeTemporaryMemory()
           if (GC_print_stats) {
             fprintf(stdout, "[total memory used:  %ld bytes.]\n",
                   totalMemoryUsed);
-            fprintf(stdout, "[total collections:  %ld.]\n", GC_gc_no);
+            fprintf(stdout, "[total collections: %lu]\n",
+                    (unsigned long)GC_gc_no);
           }
 #       endif
     }
 }
 
+#endif /* USE_TEMPORARY_MEMORY */
+
 #if __option(far_data)
 
-  void* GC_MacGetDataEnd()
+  void* GC_MacGetDataEnd(void)
   {
         CodeZeroHandle code0 = (CodeZeroHandle)GetResource('CODE', 0);
         if (code0) {

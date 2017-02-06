@@ -12,14 +12,14 @@
 dnl Process this file with autoconf to produce configure.
 
 # Initialization
-AC_INIT(gc,7.4.0,gc@linux.hpl.hp.com)
+AC_INIT(gc,7.4.4,bdwgc@lists.opendylan.org)
     ## version must conform to [0-9]+[.][0-9]+[.][0-9]+
 AC_CONFIG_SRCDIR(gcj_mlc.c)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_TARGET
 AC_PREREQ(2.61)
 GC_SET_VERSION
-AM_INIT_AUTOMAKE([foreign dist-bzip2 nostdinc])
+AM_INIT_AUTOMAKE([foreign dist-bzip2 nostdinc subdir-objects])
 AC_CONFIG_HEADERS([include/config.h])
 AM_MAINTAINER_MODE
 
@@ -145,7 +145,7 @@ AH_TEMPLATE([GC_OPENBSD_THREADS],   [Define to support OpenBSD pthreads.])
 AH_TEMPLATE([GC_OSF1_THREADS],      [Define to support Tru64 pthreads.])
 AH_TEMPLATE([GC_SOLARIS_THREADS],   [Define to support Solaris pthreads.])
 AH_TEMPLATE([GC_WIN32_THREADS],     [Define to support Win32 threads.])
-AH_TEMPLATE([GC_WIN32_PTHREADS],    [Define to support win32-pthreads.])
+AH_TEMPLATE([GC_WIN32_PTHREADS],    [Define to support pthreads-win32.])
 AH_TEMPLATE([GC_RTEMS_PTHREADS],    [Define to support rtems-pthreads.])
 
 dnl System header feature requests.
@@ -177,7 +177,7 @@ case "$THREADS" in
     AC_CHECK_LIB(pthread, pthread_self, THREADDLLIBS="-lpthread",,)
     case "$host" in
      x86-*-linux* | ia64-*-linux* | i586-*-linux* | i686-*-linux* \
-     | x86_64-*-linux* | alpha-*-linux* | sparc*-*-linux*)
+     | x86_64-*-linux* | alpha-*-linux* | powerpc*-*-linux* | sparc*-*-linux*)
         AC_DEFINE(GC_LINUX_THREADS)
         AC_DEFINE(_REENTRANT)
         if test "${enable_parallel_mark}" != no; then
@@ -275,7 +275,7 @@ case "$THREADS" in
         ;;
      *-*-mingw*)
         AC_DEFINE(GC_WIN32_PTHREADS)
-        # Using win32-pthreads
+        # Using pthreads-win32 library.
         if test "${enable_parallel_mark}" != no; then
           AC_DEFINE(PARALLEL_MARK)
         fi
@@ -310,9 +310,8 @@ case "$THREADS" in
         ;;
     esac
     case "$host" in
-     sparc*-*-solaris*)
+      sparc*-*-solaris*)
         if test "$GCC" != yes; then
-          CFLAGS="-O $CFLAGS"
           need_atomic_ops_asm=true
         fi
         ;;
@@ -378,9 +377,17 @@ AM_CONDITIONAL(PTHREADS, test x$THREADS = xposix)
 AM_CONDITIONAL(DARWIN_THREADS, test x$darwin_threads = xtrue)
 AM_CONDITIONAL(WIN32_THREADS, test x$win32_threads = xtrue)
 
+compiler_suncc=no
 case "$host" in
    powerpc-*-darwin*)
       powerpc_darwin=true
+      ;;
+   *-*-solaris*)
+      if test "$GCC" != yes; then
+        # Solaris SunCC
+        compiler_suncc=yes
+        CFLAGS="-O $CFLAGS"
+      fi
       ;;
    *-*-wince*)
       if test "$enable_gc_debug" != "no"; then
@@ -409,11 +416,15 @@ AC_TRY_COMPILE([],[
  #endif
 ], [compiler_xlc=yes], [compiler_xlc=no])
 AC_MSG_RESULT($compiler_xlc)
-AM_CONDITIONAL(COMPILER_XLC,test $compiler_xlc = yes)
 if test $compiler_xlc = yes -a "$powerpc_darwin" = true; then
   # the darwin stack-frame-walking code is completely broken on xlc
   AC_DEFINE([DARWIN_DONT_PARSE_STACK], 1, [See doc/README.macros.])
 fi
+
+# XLC neither requires nor tolerates the unnecessary assembler goop.
+# Similar for the Sun C compiler.
+AM_CONDITIONAL([ASM_WITH_CPP_UNSUPPORTED],
+    [test $compiler_xlc = yes -o $compiler_suncc = yes])
 
 if test "$GCC" = yes; then
   # Disable aliasing optimization unless forced to.
@@ -550,7 +561,8 @@ if test "${enable_shared}" = yes; then
                      [ac_cv_fvisibility_hidden=no])
       CFLAGS="$old_CFLAGS"
       AS_IF([test "$ac_cv_fvisibility_hidden" = yes],
-            [CFLAGS="-DGC_VISIBILITY_HIDDEN_SET -fvisibility=hidden $CFLAGS"])
+            [CFLAGS="-DGC_VISIBILITY_HIDDEN_SET -fvisibility=hidden $CFLAGS"],
+            [CFLAGS="-DGC_NO_VISIBILITY $CFLAGS"])
       AC_MSG_RESULT($ac_cv_fvisibility_hidden)
     fi
   fi
@@ -578,21 +590,21 @@ case "$host" in
     dnl performance under Irix.
     ;;
  sparc-*-netbsd*)
-    machdep="src/sparc_netbsd_mach_dep.lo"
+    machdep="sparc_netbsd_mach_dep.lo"
     ;;
  sparc*-*-linux* | sparc*-*-openbsd* | sparc64-*-freebsd* | sparc64-*-netbsd*)
-    machdep="src/sparc_mach_dep.lo"
+    machdep="sparc_mach_dep.lo"
     ;;
  sparc-sun-solaris2.3)
-    machdep="src/sparc_mach_dep.lo"
+    machdep="sparc_mach_dep.lo"
     AC_DEFINE(SUNOS53_SHARED_LIB, 1,
               [Define to work around a Solaris 5.3 bug (see dyn_load.c).])
     ;;
  sparc*-sun-solaris2*)
-    machdep="src/sparc_mach_dep.lo"
+    machdep="sparc_mach_dep.lo"
     ;;
  ia64-*-*)
-    machdep="src/ia64_save_regs_in_stack.lo"
+    machdep="ia64_save_regs_in_stack.lo"
     ;;
 esac
 AC_MSG_RESULT($machdep)
@@ -667,6 +679,16 @@ AC_ARG_ENABLE(gcj-support,
 if test x"$enable_gcj_support" != xno; then
     AC_DEFINE(GC_GCJ_SUPPORT, 1, [Define to include support for gcj.])
 fi
+
+dnl Interaction with other programs that might use signals.
+AC_ARG_ENABLE(sigrt-signals,
+    [AC_HELP_STRING([--enable-sigrt-signals],
+        [Force GC to use SIGRTMIN-based signals for thread suspend/resume])])
+if test x"${enable_sigrt_signals}" = xyes; then
+    AC_DEFINE([GC_USESIGRT_SIGNALS], 1,
+              [Force the GC to use signals based on SIGRTMIN+k.])
+fi
+
 
 dnl Debugging
 dnl ---------

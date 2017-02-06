@@ -60,24 +60,29 @@ struct {
   char * a_b;
 } a;
 
-int * nested_sp(void)
+word nested_sp(void)
 {
     volatile word sp;
     sp = (word)(&sp);
-    return (int *)sp;
+    return sp;
 }
+
+/* To prevent nested_sp inlining. */
+word (*volatile nested_sp_fn)(void) = nested_sp;
+
+int g(int x);
 
 int main(void)
 {
     volatile word sp;
-    long ps = GETPAGESIZE();
+    unsigned ps = GETPAGESIZE();
     jmp_buf b;
     register int x = (int)strlen("a");  /* 1, slightly disguised */
     static int y = 0;
 
     sp = (word)(&sp);
     printf("This appears to be a %s running %s\n", MACH_TYPE, OS_TYPE);
-    if ((word)nested_sp() < sp) {
+    if (nested_sp_fn() < sp) {
       printf("Stack appears to grow down, which is the default.\n");
       printf("A good guess for STACKBOTTOM on this machine is 0x%lx.\n",
              ((unsigned long)sp + ps) & ~(ps-1));
@@ -90,7 +95,7 @@ int main(void)
     printf("Note that this may vary between machines of ostensibly\n");
     printf("the same architecture (e.g. Sun 3/50s and 3/80s).\n");
     printf("On many machines the value is not fixed.\n");
-    printf("A good guess for ALIGNMENT on this machine is %ld.\n",
+    printf("A good guess for ALIGNMENT on this machine is %lu.\n",
            (unsigned long)((word)(&(a.a_b)) - (word)(&a)));
 
     printf("The following is a very dubious test of one root marking"
@@ -136,6 +141,7 @@ int main(void)
 #   ifdef PARALLEL_MARK
       printf("Parallel marking enabled.\n");
 #   endif
+    (void)g(x);
     return(0);
 }
 

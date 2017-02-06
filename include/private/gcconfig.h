@@ -203,12 +203,12 @@
 #    define SEQUENT
 #    define mach_type_known
 # endif
-# if defined(sun) && (defined(i386) || defined(__i386__))
+# if (defined(sun) || defined(__sun)) && (defined(i386) || defined(__i386__))
 #    define I386
 #    define SOLARIS
 #    define mach_type_known
 # endif
-# if defined(sun) && defined(__amd64)
+# if (defined(sun) || defined(__sun)) && defined(__amd64)
 #    define X86_64
 #    define SOLARIS
 #    define mach_type_known
@@ -221,16 +221,15 @@
 # if defined(ibm032)
 #   error IBM PC/RT no longer supported.
 # endif
-# if defined(sun) && (defined(sparc) || defined(__sparc))
+# if (defined(sun) || defined(__sun)) && (defined(sparc) || defined(__sparc))
 #   define SPARC
     /* Test for SunOS 5.x */
-#     include <errno.h>
-#     define SOLARIS
+#   include <errno.h>
+#   define SOLARIS
 #   define mach_type_known
-# endif
-# if defined(sparc) && defined(unix) && !defined(sun) && !defined(linux) \
-     && !defined(__OpenBSD__) && !defined(__NetBSD__) \
-     && !defined(__FreeBSD__) && !defined(__DragonFly__)
+# elif defined(sparc) && defined(unix) && !defined(sun) && !defined(linux) \
+       && !defined(__OpenBSD__) && !defined(__NetBSD__) \
+       && !defined(__FreeBSD__) && !defined(__DragonFly__)
 #   define SPARC
 #   define DRSNX
 #   define mach_type_known
@@ -504,7 +503,11 @@
 #   define mach_type_known
 # endif
 # if defined(__CYGWIN32__) || defined(__CYGWIN__)
-#   define I386
+#   if defined(__LP64__)
+#     define X86_64
+#   else
+#     define I386
+#   endif
 #   define CYGWIN32
 #   define mach_type_known
 # endif
@@ -699,7 +702,7 @@
  *      LINUX_STACKBOTTOM
  *      HEURISTIC1
  *      HEURISTIC2
- * If STACKBOTTOM is defined, then it's value will be used directly as the
+ * If STACKBOTTOM is defined, then its value will be used directly as the
  * stack base.  If LINUX_STACKBOTTOM is defined, then it will be determined
  * with a method appropriate for most Linux systems.  Currently we look
  * first for __libc_stack_end (currently only if USE_LIBC_PRIVATES is
@@ -740,7 +743,7 @@
  *    the original main program.  The new main program would read something
  *    like (provided real_main() is not inlined by the compiler):
  *
- *              # include "gc_private.h"
+ *              #include "gc.h"
  *
  *              main(argc, argv, envp)
  *              int argc;
@@ -768,7 +771,7 @@
  * An architecture may define PREFETCH(x) to preload the cache with *x.
  * This defaults to GCC built-in operation (or a no-op for other compilers).
  *
- * PREFETCH_FOR_WRITE(x) is used if *x is about to be written.
+ * GC_PREFETCH_FOR_WRITE(x) is used if *x is about to be written.
  *
  * An architecture may also define CLEAR_DOUBLE(x) to be a fast way to
  * clear the two words at GC_malloc-aligned address x.  By default,
@@ -783,6 +786,7 @@
 # if defined(__GNUC__) && ((__GNUC__ >= 3) \
                            || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)) \
      && !defined(__INTEL_COMPILER) && !defined(__PATHCC__) \
+     && !defined(__FUJITSU) /* for FX10 system */ \
      && !(defined(POWERPC) && defined(DARWIN)) /* for MacOS X 10.3.9 */ \
      && !defined(RTEMS) \
      && !defined(__clang__) /* since no-op in clang (3.0) */ \
@@ -918,7 +922,14 @@
 #     define OS_TYPE "LINUX"
       /* HEURISTIC1 has been reliably reported to fail for a 32-bit     */
       /* executable on a 64 bit kernel.                                 */
-#     define LINUX_STACKBOTTOM
+#     if defined(__bg__)
+        /* The Linux Compute Node Kernel (used on BlueGene systems)     */
+        /* does not support LINUX_STACKBOTTOM way.                      */
+#       define HEURISTIC2
+#       define NO_PTHREAD_GETATTR_NP
+#     else
+#       define LINUX_STACKBOTTOM
+#     endif
 #     define DYNAMIC_LOADING
 #     define SEARCH_FOR_DATA_START
       extern int _end[];
@@ -949,12 +960,12 @@
 #     define USE_MMAP_ANON
 #     define MPROTECT_VDB
 #     include <unistd.h>
-#     define GETPAGESIZE() getpagesize()
+#     define GETPAGESIZE() (unsigned)getpagesize()
 #     if defined(USE_PPC_PREFETCH) && defined(__GNUC__)
         /* The performance impact of prefetches is untested */
 #       define PREFETCH(x) \
           __asm__ __volatile__ ("dcbt 0,%0" : : "r" ((const void *) (x)))
-#       define PREFETCH_FOR_WRITE(x) \
+#       define GC_PREFETCH_FOR_WRITE(x) \
           __asm__ __volatile__ ("dcbtst 0,%0" : : "r" ((const void *) (x)))
 #     endif
       /* There seems to be some issues with trylock hanging on darwin.  */
@@ -1130,7 +1141,7 @@
 #         define HEURISTIC2
 #       endif
 #       include <unistd.h>
-#       define GETPAGESIZE()  sysconf(_SC_PAGESIZE)
+#       define GETPAGESIZE() (unsigned)sysconf(_SC_PAGESIZE)
                 /* getpagesize() appeared to be missing from at least one */
                 /* Solaris 5.4 installation.  Weird.                      */
 #       define DYNAMIC_LOADING
@@ -1231,7 +1242,7 @@
 #   ifdef BEOS
 #     define OS_TYPE "BEOS"
 #     include <OS.h>
-#     define GETPAGESIZE() B_PAGE_SIZE
+#     define GETPAGESIZE() (unsigned)B_PAGE_SIZE
       extern int etext[];
 #     define DATASTART ((ptr_t)((((word) (etext)) + 0xfff) & ~0xfff))
 #   endif
@@ -1247,8 +1258,16 @@
 /*      base is a property of the executable, so this should not break  */
 /*      old executables.                                                */
 /*      HEURISTIC2 probably works, but this appears to be preferable.   */
-#       include <sys/vm.h>
-#       define STACKBOTTOM ((ptr_t) USRSTACK)
+/*      Apparently USRSTACK is defined to be USERLIMIT, but in some     */
+/*      installations that's undefined.  We work around this with a     */
+/*      gross hack:                                                     */
+#       include <sys/vmparam.h>
+#       ifdef USERLIMIT
+          /* This should work everywhere, but doesn't.  */
+#         define STACKBOTTOM ((ptr_t)USRSTACK)
+#       else
+#         define HEURISTIC2
+#       endif
 /* At least in Solaris 2.5, PROC_VDB gives wrong values for dirty bits. */
 /* It appears to be fixed in 2.8 and 2.9.                               */
 #       ifdef SOLARIS25_PROC_VDB_BUG_FIXED
@@ -1297,7 +1316,7 @@
 #       define STACK_GROWS_DOWN
 #       define HEURISTIC2
 #       include <unistd.h>
-#       define GETPAGESIZE()  sysconf(_SC_PAGESIZE)
+#       define GETPAGESIZE() (unsigned)sysconf(_SC_PAGESIZE)
 #       define DYNAMIC_LOADING
 #       ifndef USE_MMAP
 #         define USE_MMAP
@@ -1392,7 +1411,7 @@
 #         ifdef FORCE_WRITE_PREFETCH
             /* Using prefetches for write seems to have a slight negative    */
             /* impact on performance, at least for a PIII/500.               */
-#           define PREFETCH_FOR_WRITE(x) \
+#           define GC_PREFETCH_FOR_WRITE(x) \
               __asm__ __volatile__ ("prefetcht0 %0" : : "m"(*(char *)(x)))
 #         else
 #           define NO_PREFETCH_FOR_WRITE
@@ -1400,8 +1419,13 @@
 #       elif defined(USE_3DNOW_PREFETCH)
 #         define PREFETCH(x) \
             __asm__ __volatile__ ("prefetch %0" : : "m"(*(char *)(x)))
-#         define PREFETCH_FOR_WRITE(x) \
+#         define GC_PREFETCH_FOR_WRITE(x) \
             __asm__ __volatile__ ("prefetchw %0" : : "m"(*(char *)(x)))
+#       endif
+#       if defined(__GLIBC__)
+          /* Workaround lock elision implementation for some glibc.     */
+#         define GLIBC_2_19_TSX_BUG
+#         include <gnu/libc-version.h> /* for gnu_get_libc_version() */
 #       endif
 #   endif
 #   ifdef CYGWIN32
@@ -1545,6 +1569,10 @@
 #     define DATAEND ((ptr_t) (_end))
 /* #     define MPROTECT_VDB  Not quite working yet? */
 #     define DYNAMIC_LOADING
+#     ifndef USE_MMAP
+#       define USE_MMAP
+#     endif
+#     define USE_MMAP_ANON
 #   endif
 #   ifdef DARWIN
 #     define OS_TYPE "DARWIN"
@@ -1561,7 +1589,7 @@
 #     define USE_MMAP_ANON
 #     define MPROTECT_VDB
 #     include <unistd.h>
-#     define GETPAGESIZE() getpagesize()
+#     define GETPAGESIZE() (unsigned)getpagesize()
       /* There seems to be some issues with trylock hanging on darwin.  */
       /* This should be looked into some more.                          */
 #     define NO_PTHREAD_TRYLOCK
@@ -1740,7 +1768,7 @@
 #     endif
 #     define DYNAMIC_LOADING
 #     include <unistd.h>
-#     define GETPAGESIZE() sysconf(_SC_PAGE_SIZE)
+#     define GETPAGESIZE() (unsigned)sysconf(_SC_PAGE_SIZE)
 #     ifndef __GNUC__
 #       define PREFETCH(x)  do { \
                               register long addr = (long)(x); \
@@ -1887,7 +1915,7 @@
 #       define HPUX_STACKBOTTOM
 #       define DYNAMIC_LOADING
 #       include <unistd.h>
-#       define GETPAGESIZE() sysconf(_SC_PAGE_SIZE)
+#       define GETPAGESIZE() (unsigned)sysconf(_SC_PAGE_SIZE)
         /* The following was empirically determined, and is probably    */
         /* not very robust.                                             */
         /* Note that the backing store base seems to be at a nice       */
@@ -1930,16 +1958,27 @@
 #         ifndef __INTEL_COMPILER
 #           define PREFETCH(x) \
               __asm__ ("        lfetch  [%0]": : "r"(x))
-#           define PREFETCH_FOR_WRITE(x) \
+#           define GC_PREFETCH_FOR_WRITE(x) \
               __asm__ ("        lfetch.excl     [%0]": : "r"(x))
 #           define CLEAR_DOUBLE(x) \
               __asm__ ("        stf.spill       [%0]=f0": : "r"((void *)(x)))
 #         else
 #           include <ia64intrin.h>
 #           define PREFETCH(x) __lfetch(__lfhint_none, (x))
-#           define PREFETCH_FOR_WRITE(x) __lfetch(__lfhint_nta, (x))
+#           define GC_PREFETCH_FOR_WRITE(x) __lfetch(__lfhint_nta, (x))
 #           define CLEAR_DOUBLE(x) __stf_spill((void *)(x), 0)
 #         endif /* __INTEL_COMPILER */
+#       endif
+#   endif
+#   ifdef CYGWIN32
+#       define OS_TYPE "CYGWIN32"
+#       define DATASTART ((ptr_t)GC_DATASTART)  /* From gc.h */
+#       define DATAEND   ((ptr_t)GC_DATAEND)
+#       undef STACK_GRAN
+#       define STACK_GRAN 0x10000
+#       ifdef USE_MMAP
+#         define NEED_FIND_LIMIT
+#         define USE_MMAP_ANON
 #       endif
 #   endif
 #   ifdef MSWIN32
@@ -2140,7 +2179,7 @@
 #     define USE_MMAP_ANON
 #     define MPROTECT_VDB
 #     include <unistd.h>
-#     define GETPAGESIZE() getpagesize()
+#     define GETPAGESIZE() (unsigned)getpagesize()
       /* FIXME: There seems to be some issues with trylock hanging on   */
       /* darwin. This should be looked into some more.                  */
 #     define NO_PTHREAD_TRYLOCK
@@ -2365,12 +2404,17 @@
              extern int etext[];
 #            define DATASTART ((ptr_t)((((word) (etext)) + 0xfff) & ~0xfff))
 #       endif
-#       if defined(__GLIBC__)
+#       if defined(__GLIBC__) && !defined(__UCLIBC__)
           /* At present, there's a bug in GLibc getcontext() on         */
           /* Linux/x64 (it clears FPU exception mask).  We define this  */
           /* macro to workaround it.                                    */
           /* FIXME: This seems to be fixed in GLibc v2.14.              */
 #         define GETCONTEXT_FPU_EXCMASK_BUG
+#       endif
+#       if defined(__GLIBC__)
+          /* Workaround lock elision implementation for some glibc.     */
+#         define GLIBC_2_19_TSX_BUG
+#         include <gnu/libc-version.h> /* for gnu_get_libc_version() */
 #       endif
 #   endif
 #   ifdef DARWIN
@@ -2388,7 +2432,7 @@
 #     define USE_MMAP_ANON
 #     define MPROTECT_VDB
 #     include <unistd.h>
-#     define GETPAGESIZE() getpagesize()
+#     define GETPAGESIZE() (unsigned)getpagesize()
       /* There seems to be some issues with trylock hanging on darwin.  */
       /* This should be looked into some more.                          */
 #     define NO_PTHREAD_TRYLOCK
@@ -2580,6 +2624,16 @@
 # define DATAEND (ptr_t)(end)
 #endif
 
+/* Workaround for Android NDK clang 3.5+ (as of NDK r10e) which does    */
+/* not provide correct _end symbol.  Unfortunately, alternate __end__   */
+/* symbol is provided only by NDK "bfd" linker.                         */
+#if defined(PLATFORM_ANDROID) && defined(__clang__)
+# undef DATAEND
+# pragma weak __end__
+  extern int __end__[];
+# define DATAEND (__end__ != 0 ? (ptr_t)__end__ : (ptr_t)_end)
+#endif
+
 #if defined(PLATFORM_ANDROID) && !defined(THREADS) \
     && !defined(USE_GET_STACKBASE_FOR_MAIN)
   /* Always use pthread_attr_getstack on Android ("-lpthread" option is  */
@@ -2590,7 +2644,7 @@
 
 #if (defined(SVR4) || defined(PLATFORM_ANDROID) || defined(PLATFORM_TIZEN)) && !defined(GETPAGESIZE)
 # include <unistd.h>
-# define GETPAGESIZE()  sysconf(_SC_PAGESIZE)
+# define GETPAGESIZE() (unsigned)sysconf(_SC_PAGESIZE)
 #endif
 
 #ifndef GETPAGESIZE
@@ -2598,7 +2652,7 @@
      || defined(NETBSD) || defined(FREEBSD) || defined(HPUX)
 #   include <unistd.h>
 # endif
-# define GETPAGESIZE() getpagesize()
+# define GETPAGESIZE() (unsigned)getpagesize()
 #endif
 
 #if defined(SOLARIS) || defined(DRSNX) || defined(UTS4)
@@ -2690,6 +2744,11 @@
 # undef USE_MMAP
 #endif
 
+#if defined(LINUX) || defined(FREEBSD) || defined(SOLARIS) || defined(IRIX5) \
+    || ((defined(USE_MMAP) || defined(USE_MUNMAP)) && !defined(USE_WINALLOC))
+# define MMAP_SUPPORTED
+#endif
+
 #if defined(GC_DISABLE_INCREMENTAL) || defined(MANUAL_VDB)
 # undef GWW_VDB
 # undef MPROTECT_VDB
@@ -2748,11 +2807,11 @@
 # endif
 #endif
 
-#ifndef PREFETCH_FOR_WRITE
+#ifndef GC_PREFETCH_FOR_WRITE
 # if defined(__GNUC__) && __GNUC__ >= 3 && !defined(NO_PREFETCH_FOR_WRITE)
-#   define PREFETCH_FOR_WRITE(x) __builtin_prefetch((x), 1)
+#   define GC_PREFETCH_FOR_WRITE(x) __builtin_prefetch((x), 1)
 # else
-#   define PREFETCH_FOR_WRITE(x) (void)0
+#   define GC_PREFETCH_FOR_WRITE(x) (void)0
 # endif
 #endif
 
@@ -3024,52 +3083,60 @@
         /* usually makes it possible to merge consecutively allocated   */
         /* chunks.  It also avoids unintended recursion with            */
         /* REDIRECT_MALLOC macro defined.                               */
-        /* GET_MEM() returns a HLKSIZE aligned chunk.                   */
+        /* GET_MEM() argument should be of size_t type and have         */
+        /* no side-effect.  GET_MEM() returns HLKSIZE-aligned chunk;    */
         /* 0 is taken to mean failure.                                  */
-        /* In the case os USE_MMAP, the argument must also be a         */
-        /* physical page size.                                          */
+        /* In case of MMAP_SUPPORTED, the argument must also be         */
+        /* a multiple of a physical page size.                          */
         /* GET_MEM is currently not assumed to retrieve 0 filled space, */
         /* though we should perhaps take advantage of the case in which */
         /* does.                                                        */
         struct hblk;    /* See gc_priv.h.       */
 # if defined(PCR)
     char * real_malloc(size_t bytes);
-#   define GET_MEM(bytes) HBLKPTR(real_malloc((size_t)(bytes) + GC_page_size) \
+#   define GET_MEM(bytes) HBLKPTR(real_malloc(SIZET_SAT_ADD(bytes, \
+                                                            GC_page_size)) \
                                           + GC_page_size-1)
 # elif defined(OS2)
     void * os2_alloc(size_t bytes);
-#   define GET_MEM(bytes) HBLKPTR((ptr_t)os2_alloc((size_t)(bytes) \
-                                            + GC_page_size) + GC_page_size-1)
+#   define GET_MEM(bytes) HBLKPTR((ptr_t)os2_alloc( \
+                                            SIZET_SAT_ADD(bytes, \
+                                                          GC_page_size)) \
+                                  + GC_page_size-1)
 # elif defined(NEXT) || defined(DOS4GW) || defined(NONSTOP) \
         || (defined(AMIGA) && !defined(GC_AMIGA_FASTALLOC)) \
         || (defined(SOLARIS) && !defined(USE_MMAP)) || defined(RTEMS) \
         || defined(__CC_ARM)
 #   define GET_MEM(bytes) HBLKPTR((size_t)calloc(1, \
-                                            (size_t)(bytes) + GC_page_size) \
+                                            SIZET_SAT_ADD(bytes, \
+                                                          GC_page_size)) \
                                   + GC_page_size - 1)
 # elif defined(_XBOX_ONE)
 	extern void* durango_get_mem (size_t size, size_t page_size);
 #   define GET_MEM(bytes) (struct hblk *)durango_get_mem(bytes, 0)
 # elif defined(MSWIN32) || defined(CYGWIN32)
-    ptr_t GC_win32_get_mem(GC_word bytes);
+    ptr_t GC_win32_get_mem(size_t bytes);
 #   define GET_MEM(bytes) (struct hblk *)GC_win32_get_mem(bytes)
 # elif defined(MACOS)
 #   if defined(USE_TEMPORARY_MEMORY)
       Ptr GC_MacTemporaryNewPtr(size_t size, Boolean clearMemory);
-#     define GET_MEM(bytes) HBLKPTR( \
-                        GC_MacTemporaryNewPtr((bytes) + GC_page_size, true) \
+#     define GET_MEM(bytes) HBLKPTR(GC_MacTemporaryNewPtr( \
+                                        SIZET_SAT_ADD(bytes, \
+                                                      GC_page_size), true) \
                         + GC_page_size-1)
 #   else
-#     define GET_MEM(bytes) HBLKPTR(NewPtrClear((bytes) + GC_page_size) \
+#     define GET_MEM(bytes) HBLKPTR(NewPtrClear(SIZET_SAT_ADD(bytes, \
+                                                              GC_page_size)) \
                                     + GC_page_size-1)
 #   endif
 # elif defined(MSWINCE)
-    ptr_t GC_wince_get_mem(GC_word bytes);
+    ptr_t GC_wince_get_mem(size_t bytes);
 #   define GET_MEM(bytes) (struct hblk *)GC_wince_get_mem(bytes)
 # elif defined(AMIGA) && defined(GC_AMIGA_FASTALLOC)
-    void *GC_amiga_get_mem(size_t size);
-#   define GET_MEM(bytes) HBLKPTR((size_t) \
-                          GC_amiga_get_mem((size_t)(bytes) + GC_page_size) \
+    void *GC_amiga_get_mem(size_t bytes);
+#   define GET_MEM(bytes) HBLKPTR((size_t)GC_amiga_get_mem( \
+                                            SIZET_SAT_ADD(bytes, \
+                                                          GC_page_size)) \
                           + GC_page_size-1)
 # elif defined(SN_TARGET_PS3)
     void *ps3_get_mem(size_t size);
@@ -3087,7 +3154,7 @@
 	extern void *switch_get_mem (size_t size);
 #   define GET_MEM(bytes) (struct hblk*) switch_get_mem (bytes)
 # else
-    ptr_t GC_unix_get_mem(GC_word bytes);
+    ptr_t GC_unix_get_mem(size_t bytes);
 #   define GET_MEM(bytes) (struct hblk *)GC_unix_get_mem(bytes)
 # endif
 

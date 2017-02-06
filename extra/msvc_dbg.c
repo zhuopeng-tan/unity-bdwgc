@@ -47,7 +47,7 @@ typedef GC_word word;
         typedef ULONG        ULONG_ADDR;
 #endif
 
-static HANDLE GetSymHandle()
+static HANDLE GetSymHandle(void)
 {
   static HANDLE symHandle = NULL;
   if (!symHandle) {
@@ -317,7 +317,7 @@ size_t GetDescriptionFromAddress(void* address, const char* format,
   size = (GC_ULONG_PTR)end < (GC_ULONG_PTR)buffer ? 0 : end - buffer;
 
   if (line_number) {
-    wsprintf(str, "(%d) : ", line_number);
+    wsprintf(str, "(%d) : ", (int)line_number);
     if (size) {
       strncpy(buffer, str, size)[size - 1] = 0;
     }
@@ -378,4 +378,9 @@ char** backtrace_symbols(void*const* addresses, int count)
   return symbols;
 }
 
-#endif /* !_M_AMD64 */
+#else
+
+  extern int GC_quiet;
+        /* ANSI C does not allow translation units to be empty. */
+
+#endif /* _M_AMD64 */

@@ -68,20 +68,11 @@
 #   include <unistd.h>
 # endif
 
-#else
+#elif !defined(MSWINCE)
+# include <process.h>  /* For _beginthreadex, _endthreadex */
+# include <errno.h> /* for errno, EAGAIN */
 
-# ifdef MSWINCE
-    /* Force DONT_USE_SIGNALANDWAIT implementation of PARALLEL_MARK     */
-    /* for WinCE (since Win32 SignalObjectAndWait() is missing).        */
-#   ifndef DONT_USE_SIGNALANDWAIT
-#     define DONT_USE_SIGNALANDWAIT
-#   endif
-# else
-#   include <process.h>  /* For _beginthreadex, _endthreadex */
-#   include <errno.h> /* for errno, EAGAIN */
-# endif
-
-#endif
+#endif /* !GC_PTHREADS && !MSWINCE */
 
 /* DllMain-based thread registration is currently incompatible  */
 /* with thread-local allocation, pthreads and WinCE.            */
@@ -1676,10 +1667,15 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
 
 # if defined(GC_PTHREADS) && !defined(GC_PTHREADS_PARAMARK)
     /* Use pthread-based parallel mark implementation.    */
-#   define GC_PTHREADS_PARAMARK
+
+    /* Workaround a deadlock in winpthreads-3.0b internals (observed    */
+    /* with MinGW 32/64).                                               */
+#   if !defined(__MINGW32__)
+#     define GC_PTHREADS_PARAMARK
+#   endif
 # endif
 
-# if !defined(GC_PTHREADS_PARAMARK) && defined(DONT_USE_SIGNALANDWAIT)
+# if !defined(GC_PTHREADS_PARAMARK)
     STATIC HANDLE GC_marker_cv[MAX_MARKERS - 1] = {0};
                         /* Events with manual reset (one for each       */
                         /* mark helper).                                */
@@ -1694,12 +1690,10 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
   /* GC_mark_thread() is the same as in pthread_support.c */
 # ifdef GC_PTHREADS_PARAMARK
     STATIC void * GC_mark_thread(void * id)
+# elif defined(MSWINCE)
+    STATIC DWORD WINAPI GC_mark_thread(LPVOID id)
 # else
-#   ifdef MSWINCE
-      STATIC DWORD WINAPI GC_mark_thread(LPVOID id)
-#   else
-      STATIC unsigned __stdcall GC_mark_thread(void * id)
-#   endif
+    STATIC unsigned __stdcall GC_mark_thread(void * id)
 # endif
   {
     word my_mark_no = 0;
@@ -1709,9 +1703,15 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
 #   ifdef IA64
       marker_bsp[(word)id] = GC_save_regs_in_stack();
 #   endif
-#   if !defined(GC_PTHREADS_PARAMARK) && defined(DONT_USE_SIGNALANDWAIT)
+#   if !defined(GC_PTHREADS_PARAMARK)
       GC_marker_Id[(word)id] = GetCurrentThreadId();
 #   endif
+
+    /* Inform start_mark_threads() about completion of marker data init. */
+    GC_acquire_mark_lock();
+    if (0 == --GC_fl_builder_count)
+      GC_notify_all_builder();
+    GC_release_mark_lock();
 
     for (;; ++my_mark_no) {
       if (my_mark_no - GC_mark_no > (word)2) {
@@ -1741,8 +1741,9 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
 # ifdef GC_PTHREADS_PARAMARK
 #   include <pthread.h>
 
-#   ifndef NUMERIC_THREAD_ID
-#     define NUMERIC_THREAD_ID(id) (unsigned long)GC_PTHREAD_PTRVAL(id)
+#   if defined(GC_ASSERTIONS) && !defined(NUMERIC_THREAD_ID)
+#     define NUMERIC_THREAD_ID(id) (unsigned long)(word)GC_PTHREAD_PTRVAL(id)
+      /* Id not guaranteed to be unique. */
 #   endif
 
     /* start_mark_threads is the same as in pthread_support.c except    */
@@ -1761,6 +1762,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
       pthread_t new_thread;
 
       GC_ASSERT(I_DONT_HOLD_LOCK());
+      GC_ASSERT(GC_fl_builder_count == 0);
 #     ifdef CAN_HANDLE_FORK
         if (available_markers_m1 <= 0 || GC_parallel) return;
                 /* Skip if parallel markers disabled or already started. */
@@ -1774,13 +1776,14 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
         marker_last_stack_min[i] = ADDR_LIMIT;
         if (0 != pthread_create(&new_thread, &attr,
                                 GC_mark_thread, (void *)(word)i)) {
-          WARN("Marker thread creation failed.\n", 0);
+          WARN("Marker thread creation failed\n", 0);
           /* Don't try to create other marker threads.    */
           break;
         }
       }
       GC_markers_m1 = i;
-      pthread_attr_destroy(&attr);
+      (void)pthread_attr_destroy(&attr);
+      GC_wait_for_markers_init();
       GC_COND_LOG_PRINTF("Started %d mark helper threads\n", GC_markers_m1);
     }
 
@@ -1810,7 +1813,9 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
 
     GC_INNER void GC_acquire_mark_lock(void)
     {
-      GC_ASSERT(GC_mark_lock_holder != NUMERIC_THREAD_ID(pthread_self()));
+#     ifdef NUMERIC_THREAD_ID_UNIQUE
+        GC_ASSERT(GC_mark_lock_holder != NUMERIC_THREAD_ID(pthread_self()));
+#     endif
       if (pthread_mutex_lock(&mark_mutex) != 0) {
         ABORT("pthread_mutex_lock failed");
       }
@@ -1902,17 +1907,16 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
         unsigned thread_id;
 #     endif
 
-#     ifdef DONT_USE_SIGNALANDWAIT
-        /* Initialize GC_marker_cv[] fully before starting the  */
-        /* first helper thread.                                 */
-        for (i = 0; i < GC_markers_m1; ++i) {
-          if ((GC_marker_cv[i] = CreateEvent(NULL /* attrs */,
+      GC_ASSERT(GC_fl_builder_count == 0);
+      /* Initialize GC_marker_cv[] fully before starting the    */
+      /* first helper thread.                                   */
+      for (i = 0; i < GC_markers_m1; ++i) {
+        if ((GC_marker_cv[i] = CreateEvent(NULL /* attrs */,
                                         TRUE /* isManualReset */,
                                         FALSE /* initialState */,
                                         NULL /* name (A/W) */)) == (HANDLE)0)
-            ABORT("CreateEvent failed");
-        }
-#     endif
+          ABORT("CreateEvent failed");
+      }
 
       for (i = 0; i < GC_markers_m1; ++i) {
         marker_last_stack_min[i] = ADDR_LIMIT;
@@ -1946,14 +1950,11 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
       }
 
       /* Adjust GC_markers_m1 (and free unused resources) if failed.    */
-#     ifdef DONT_USE_SIGNALANDWAIT
-        while (GC_markers_m1 > i) {
-          GC_markers_m1--;
-          CloseHandle(GC_marker_cv[GC_markers_m1]);
-        }
-#     else
-        GC_markers_m1 = i;
-#     endif
+      while (GC_markers_m1 > i) {
+        GC_markers_m1--;
+        CloseHandle(GC_marker_cv[GC_markers_m1]);
+      }
+      GC_wait_for_markers_init();
       GC_COND_LOG_PRINTF("Started %d mark helper threads\n", GC_markers_m1);
       if (i == 0) {
         CloseHandle(mark_cv);
@@ -1973,16 +1974,11 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
                 } while (0)
 #   endif /* GC_ASSERTIONS */
 
-#   ifdef DONT_USE_SIGNALANDWAIT
-      STATIC /* volatile */ LONG GC_mark_mutex_state = 0;
+    STATIC /* volatile */ LONG GC_mark_mutex_state = 0;
                                 /* Mutex state: 0 - unlocked,           */
                                 /* 1 - locked and no other waiters,     */
                                 /* -1 - locked and waiters may exist.   */
                                 /* Accessed by InterlockedExchange().   */
-#   else
-      STATIC volatile AO_t GC_mark_mutex_waitcnt = 0;
-                                /* Number of waiters + 1; 0 - unlocked. */
-#   endif
 
     /* #define LOCK_STATS */
 #   ifdef LOCK_STATS
@@ -1993,21 +1989,13 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
     GC_INNER void GC_acquire_mark_lock(void)
     {
       GC_ASSERT(GC_mark_lock_holder != GetCurrentThreadId());
-#     ifdef DONT_USE_SIGNALANDWAIT
-        if (InterlockedExchange(&GC_mark_mutex_state, 1 /* locked */) != 0)
-#     else
-        if (AO_fetch_and_add1_acquire(&GC_mark_mutex_waitcnt) != 0)
-#     endif
-      {
+      if (InterlockedExchange(&GC_mark_mutex_state, 1 /* locked */) != 0) {
 #       ifdef LOCK_STATS
           (void)AO_fetch_and_add1(&GC_block_count);
 #       endif
-#       ifdef DONT_USE_SIGNALANDWAIT
-          /* Repeatedly reset the state and wait until acquire the lock. */
-          while (InterlockedExchange(&GC_mark_mutex_state,
-                                     -1 /* locked_and_has_waiters */) != 0)
-#       endif
-        {
+        /* Repeatedly reset the state and wait until acquire the lock.  */
+        while (InterlockedExchange(&GC_mark_mutex_state,
+                                   -1 /* locked_and_has_waiters */) != 0) {
           if (WaitForSingleObject(mark_mutex_event, INFINITE) == WAIT_FAILED)
             ABORT("WaitForSingleObject failed");
         }
@@ -2025,17 +2013,11 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
     GC_INNER void GC_release_mark_lock(void)
     {
       UNSET_MARK_LOCK_HOLDER;
-#     ifdef DONT_USE_SIGNALANDWAIT
-        if (InterlockedExchange(&GC_mark_mutex_state, 0 /* unlocked */) < 0)
-#     else
-        GC_ASSERT(AO_load(&GC_mark_mutex_waitcnt) != 0);
-        if (AO_fetch_and_sub1_release(&GC_mark_mutex_waitcnt) > 1)
-#     endif
-        {
-          /* wake a waiter */
-          if (SetEvent(mark_mutex_event) == FALSE)
-            ABORT("SetEvent failed");
-        }
+      if (InterlockedExchange(&GC_mark_mutex_state, 0 /* unlocked */) < 0) {
+        /* wake a waiter */
+        if (SetEvent(mark_mutex_event) == FALSE)
+          ABORT("SetEvent failed");
+      }
     }
 
     /* In GC_wait_for_reclaim/GC_notify_all_builder() we emulate POSIX    */
@@ -2070,115 +2052,41 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
         ABORT("SetEvent failed");
     }
 
-#   ifdef DONT_USE_SIGNALANDWAIT
+    /* mark_cv is used (for waiting) by a non-helper thread.    */
 
-      /* mark_cv is used (for waiting) by a non-helper thread.  */
+    GC_INNER void GC_wait_marker(void)
+    {
+      HANDLE event = mark_cv;
+      DWORD thread_id = GetCurrentThreadId();
+      int i = GC_markers_m1;
 
-      GC_INNER void GC_wait_marker(void)
-      {
-        HANDLE event = mark_cv;
-        DWORD thread_id = GetCurrentThreadId();
-        int i = GC_markers_m1;
-
-        while (i-- > 0) {
-          if (GC_marker_Id[i] == thread_id) {
-            event = GC_marker_cv[i];
-            break;
-          }
-        }
-
-        if (ResetEvent(event) == FALSE)
-          ABORT("ResetEvent failed");
-        GC_release_mark_lock();
-        if (WaitForSingleObject(event, INFINITE) == WAIT_FAILED)
-          ABORT("WaitForSingleObject failed");
-        GC_acquire_mark_lock();
-      }
-
-      GC_INNER void GC_notify_all_marker(void)
-      {
-        DWORD thread_id = GetCurrentThreadId();
-        int i = GC_markers_m1;
-
-        while (i-- > 0) {
-          /* Notify every marker ignoring self (for efficiency).  */
-          if (SetEvent(GC_marker_Id[i] != thread_id ? GC_marker_cv[i] :
-                       mark_cv) == FALSE)
-            ABORT("SetEvent failed");
+      while (i-- > 0) {
+        if (GC_marker_Id[i] == thread_id) {
+          event = GC_marker_cv[i];
+          break;
         }
       }
 
-#   else /* DONT_USE_SIGNALANDWAIT */
+      if (ResetEvent(event) == FALSE)
+        ABORT("ResetEvent failed");
+      GC_release_mark_lock();
+      if (WaitForSingleObject(event, INFINITE) == WAIT_FAILED)
+        ABORT("WaitForSingleObject failed");
+      GC_acquire_mark_lock();
+    }
 
-      /* For GC_wait_marker/GC_notify_all_marker() the above technique  */
-      /* does not work because they are used with different checked     */
-      /* conditions in different places (and, in addition, notifying is */
-      /* done after leaving critical section) and this could result in  */
-      /* a signal losing between checking for a particular condition    */
-      /* and calling WaitForSingleObject.  So, we use PulseEvent() and  */
-      /* NT SignalObjectAndWait() (which atomically sets mutex event to */
-      /* signaled state and starts waiting on condvar).  A special      */
-      /* case here is GC_mark_mutex_waitcnt == 1 (i.e. nobody waits for */
-      /* mark lock at this moment) - we don't change it (otherwise we   */
-      /* may lose a signal sent between decrementing mark_mutex_waitcnt */
-      /* and calling WaitForSingleObject).                              */
+    GC_INNER void GC_notify_all_marker(void)
+    {
+      DWORD thread_id = GetCurrentThreadId();
+      int i = GC_markers_m1;
 
-#     ifdef MSWINCE
-        /* SignalObjectAndWait() is missing in WinCE (for now), so you  */
-        /* should supply its emulation (externally) to use this code.   */
-        WINBASEAPI DWORD WINAPI SignalObjectAndWait(HANDLE, HANDLE, DWORD,
-                                                    BOOL);
-#       define signalObjectAndWait_func SignalObjectAndWait
-#     else
-        typedef DWORD (WINAPI * SignalObjectAndWait_type)(HANDLE, HANDLE,
-                                                          DWORD, BOOL);
-        static SignalObjectAndWait_type signalObjectAndWait_func = 0;
-#     endif
-
-      GC_INNER void GC_wait_marker(void)
-      {
-        /* Here we assume that GC_wait_marker() is always called        */
-        /* from a while(check_cond) loop.                               */
-        AO_t waitcnt;
-        GC_ASSERT(mark_cv != 0);
-
-        /* We inline GC_release_mark_lock() to have atomic              */
-        /* unlock-and-wait action here.                                 */
-        UNSET_MARK_LOCK_HOLDER;
-        if ((waitcnt = AO_load(&GC_mark_mutex_waitcnt)) > 1) {
-          (void)AO_fetch_and_sub1_release(&GC_mark_mutex_waitcnt);
-        } else {
-          GC_ASSERT(AO_load(&GC_mark_mutex_waitcnt) != 0);
-        }
-
-        /* The state of mark_cv is non-signaled here. */
-        if (signalObjectAndWait_func(mark_mutex_event /* hObjectToSignal */,
-                                     mark_cv /* hObjectToWaitOn */,
-                                     INFINITE /* timeout */,
-                                     FALSE /* isAlertable */) == WAIT_FAILED)
-          ABORT("SignalObjectAndWait failed");
-        /* The state of mark_cv is non-signaled here again. */
-
-        if (waitcnt > 1) {
-          GC_acquire_mark_lock();
-        } else {
-          GC_ASSERT(GC_mark_mutex_waitcnt != 0);
-          /* Acquire mark lock */
-          if (WaitForSingleObject(mark_mutex_event, INFINITE) == WAIT_FAILED)
-            ABORT("WaitForSingleObject failed");
-          GC_ASSERT(GC_mark_lock_holder == NO_THREAD);
-          SET_MARK_LOCK_HOLDER;
-        }
+      while (i-- > 0) {
+        /* Notify every marker ignoring self (for efficiency).  */
+        if (SetEvent(GC_marker_Id[i] != thread_id ? GC_marker_cv[i] :
+                     mark_cv) == FALSE)
+          ABORT("SetEvent failed");
       }
-
-      GC_INNER void GC_notify_all_marker(void)
-      {
-        GC_ASSERT(mark_cv != 0);
-        if (PulseEvent(mark_cv) == FALSE)
-          ABORT("PulseEvent failed");
-      }
-
-#   endif /* !DONT_USE_SIGNALANDWAIT */
+    }
 
 # endif /* ! GC_PTHREADS_PARAMARK */
 
@@ -2456,19 +2364,20 @@ GC_INNER void GC_thr_init(void)
 # if defined(PARALLEL_MARK)
     {
       char * markers_string = GETENV("GC_MARKERS");
-      int markers_m1;
+      int markers;
 
       if (markers_string != NULL) {
-        markers_m1 = atoi(markers_string) - 1;
-        if (markers_m1 >= MAX_MARKERS) {
-          WARN("Limiting number of mark threads\n", 0);
-          markers_m1 = MAX_MARKERS - 1;
+        markers = atoi(markers_string);
+        if (markers <= 0 || markers > MAX_MARKERS) {
+          WARN("Too big or invalid number of mark threads: %" WARN_PRIdPTR
+               "; using maximum threads\n", (signed_word)markers);
+          markers = MAX_MARKERS;
         }
       } else {
 #       ifdef MSWINCE
           /* There is no GetProcessAffinityMask() in WinCE.     */
           /* GC_sysinfo is already initialized.                 */
-          markers_m1 = (int)GC_sysinfo.dwNumberOfProcessors - 1;
+          markers = (int)GC_sysinfo.dwNumberOfProcessors;
 #       else
 #         ifdef _WIN64
             DWORD_PTR procMask = 0;
@@ -2485,35 +2394,22 @@ GC_INNER void GC_thr_init(void)
               ncpu++;
             } while ((procMask &= procMask - 1) != 0);
           }
-          markers_m1 = ncpu - 1;
+          markers = ncpu;
 #       endif
 #       ifdef GC_MIN_MARKERS
           /* This is primarily for testing on systems without getenv(). */
-          if (markers_m1 < GC_MIN_MARKERS - 1)
-            markers_m1 = GC_MIN_MARKERS - 1;
+          if (markers < GC_MIN_MARKERS)
+            markers = GC_MIN_MARKERS;
 #       endif
-        if (markers_m1 >= MAX_MARKERS)
-          markers_m1 = MAX_MARKERS - 1; /* silently limit the value */
+        if (markers > MAX_MARKERS)
+          markers = MAX_MARKERS; /* silently limit the value */
       }
-      available_markers_m1 = markers_m1;
+      available_markers_m1 = markers - 1;
     }
 
     /* Check whether parallel mode could be enabled.    */
     {
-#     if !defined(GC_PTHREADS_PARAMARK) && !defined(MSWINCE) \
-                && !defined(DONT_USE_SIGNALANDWAIT)
-        HMODULE hK32;
-        /* SignalObjectAndWait() API call works only under NT.          */
-#     endif
-      if (GC_win32_dll_threads || available_markers_m1 <= 0
-#         if !defined(GC_PTHREADS_PARAMARK) && !defined(MSWINCE) \
-                && !defined(DONT_USE_SIGNALANDWAIT)
-            || GC_wnt == FALSE
-            || (hK32 = GetModuleHandle(TEXT("kernel32.dll"))) == (HMODULE)0
-            || (signalObjectAndWait_func = (SignalObjectAndWait_type)
-                        GetProcAddress(hK32, "SignalObjectAndWait")) == 0
-#         endif
-         ) {
+      if (GC_win32_dll_threads || available_markers_m1 <= 0) {
         /* Disable parallel marking. */
         GC_parallel = FALSE;
         GC_COND_LOG_PRINTF(
@@ -2581,15 +2477,14 @@ GC_INNER void GC_thr_init(void)
 #   ifndef GC_WIN32_PTHREADS
       while ((t = GC_lookup_pthread(pthread_id)) == 0)
         Sleep(10);
-#   endif
-
-    result = pthread_join(pthread_id, retval);
-
-#   ifdef GC_WIN32_PTHREADS
-      /* win32_pthreads id are unique */
+      result = pthread_join(pthread_id, retval);
+#   else
+      result = pthread_join(pthread_id, retval);
+      /* pthreads-win32 id are unique (not recycled) */
       t = GC_lookup_pthread(pthread_id);
       if (NULL == t) ABORT("Thread not registered");
 #   endif
+
     LOCK();
     GC_delete_gc_thread_no_free(t);
     GC_INTERNAL_FREE(t);
@@ -2604,7 +2499,7 @@ GC_INNER void GC_thr_init(void)
   }
 
   /* Cygwin-pthreads calls CreateThread internally, but it's not easily */
-  /* interceptible by us..., so intercept pthread_create instead.       */
+  /* interceptable by us..., so intercept pthread_create instead.       */
   GC_API int GC_pthread_create(pthread_t *new_thread,
                                GC_PTHREAD_CREATE_CONST pthread_attr_t *attr,
                                void *(*start_routine)(void *), void *arg)
@@ -2876,7 +2771,7 @@ GC_INNER void GC_init_parallel(void)
 
 #if defined(USE_PTHREAD_LOCKS)
   /* Support for pthread locking code.          */
-  /* Pthread_mutex_try_lock may not win here,   */
+  /* pthread_mutex_trylock may not win here,    */
   /* due to builtin support for spinning first? */
 
   GC_INNER volatile GC_bool GC_collecting = 0;

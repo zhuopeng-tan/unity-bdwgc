@@ -27,23 +27,6 @@
  * all flavors of pthread support code into this file.
  */
 
-/*
- * Linux_threads.c now also includes some code to support HPUX and
- * OSF1 (Compaq Tru64 Unix, really).  The OSF1 support is based on Eric Benson's
- * patch.
- *
- * Eric also suggested an alternate basis for a lock implementation in
- * his code:
- * + #elif defined(OSF1)
- * +    unsigned long GC_allocate_lock = 0;
- * +    msemaphore GC_allocate_semaphore;
- * + #  define GC_TRY_LOCK() \
- * +    ((msem_lock(&GC_allocate_semaphore, MSEM_IF_NOWAIT) == 0) \
- * +     ? (GC_allocate_lock = 1) \
- * +     : 0)
- * + #  define GC_LOCK_TAKEN GC_allocate_lock
- */
-
 #if defined(GC_PTHREADS) && !defined(GC_WIN32_THREADS)
 # include <stdlib.h>
 # include <pthread.h>
@@ -371,6 +354,12 @@ STATIC void * GC_mark_thread(void * id)
     marker_mach_threads[(word)id] = mach_thread_self();
 # endif
 
+  /* Inform start_mark_threads() about completion of marker data init.  */
+  GC_acquire_mark_lock();
+  if (0 == --GC_fl_builder_count)
+    GC_notify_all_builder();
+  GC_release_mark_lock();
+
   for (;; ++my_mark_no) {
     /* GC_mark_no is passed only to allow GC_help_marker to terminate   */
     /* promptly.  This is important if it were called from the signal   */
@@ -407,6 +396,7 @@ start_mark_threads(void)
     pthread_attr_t attr;
 
     GC_ASSERT(I_DONT_HOLD_LOCK());
+    GC_ASSERT(GC_fl_builder_count == 0);
 #   ifdef CAN_HANDLE_FORK
       if (available_markers_m1 <= 0 || GC_parallel) return;
                 /* Skip if parallel markers disabled or already started. */
@@ -444,7 +434,8 @@ start_mark_threads(void)
       }
     }
     GC_markers_m1 = i;
-    pthread_attr_destroy(&attr);
+    (void)pthread_attr_destroy(&attr);
+    GC_wait_for_markers_init();
     GC_COND_LOG_PRINTF("Started %d mark helper threads\n", GC_markers_m1);
 }
 
@@ -1030,6 +1021,10 @@ static void fork_child_proc(void)
                                         ptr_t *startp, ptr_t *endp);
 #endif
 
+#ifdef PARALLEL_MARK
+  static void setup_mark_lock(void);
+#endif
+
 /* We hold the allocation lock. */
 GC_INNER void GC_thr_init(void)
 {
@@ -1107,30 +1102,31 @@ GC_INNER void GC_thr_init(void)
       available_markers_m1 = 0; /* but use only one marker */
 #   endif
   } else {
-#  ifdef PARALLEL_MARK
-     {
-       char * markers_string = GETENV("GC_MARKERS");
-       int markers_m1;
+#   ifdef PARALLEL_MARK
+      {
+        char * markers_string = GETENV("GC_MARKERS");
+        int markers;
 
-       if (markers_string != NULL) {
-         markers_m1 = atoi(markers_string) - 1;
-         if (markers_m1 >= MAX_MARKERS) {
-           WARN("Limiting number of mark threads\n", 0);
-           markers_m1 = MAX_MARKERS - 1;
-         }
-       } else {
-         markers_m1 = GC_nprocs - 1;
-#        ifdef GC_MIN_MARKERS
-           /* This is primarily for targets without getenv().   */
-           if (markers_m1 < GC_MIN_MARKERS - 1)
-             markers_m1 = GC_MIN_MARKERS - 1;
-#        endif
-         if (markers_m1 >= MAX_MARKERS)
-           markers_m1 = MAX_MARKERS - 1; /* silently limit the value */
-       }
-       available_markers_m1 = markers_m1;
-     }
-#  endif
+        if (markers_string != NULL) {
+          markers = atoi(markers_string);
+          if (markers <= 0 || markers > MAX_MARKERS) {
+            WARN("Too big or invalid number of mark threads: %" WARN_PRIdPTR
+                 "; using maximum threads\n", (signed_word)markers);
+            markers = MAX_MARKERS;
+          }
+        } else {
+          markers = GC_nprocs;
+#         ifdef GC_MIN_MARKERS
+            /* This is primarily for targets without getenv().  */
+            if (markers < GC_MIN_MARKERS)
+              markers = GC_MIN_MARKERS;
+#         endif
+          if (markers > MAX_MARKERS)
+            markers = MAX_MARKERS; /* silently limit the value */
+        }
+        available_markers_m1 = markers - 1;
+      }
+#   endif
   }
   GC_COND_LOG_PRINTF("Number of processors = %d\n", GC_nprocs);
 # ifdef PARALLEL_MARK
@@ -1142,6 +1138,7 @@ GC_INNER void GC_thr_init(void)
     } else {
       /* Disable true incremental collection, but generational is OK.   */
       GC_time_limit = GC_TIME_UNLIMITED;
+      setup_mark_lock();
       /* If we are using a parallel marker, actually start helper threads. */
       start_mark_threads();
     }
@@ -1183,7 +1180,8 @@ GC_INNER void GC_init_parallel(void)
         fudged_set = *set;
         sig_suspend = GC_get_suspend_signal();
         GC_ASSERT(sig_suspend >= 0);
-        sigdelset(&fudged_set, sig_suspend);
+        if (sigdelset(&fudged_set, sig_suspend) != 0)
+            ABORT("sigdelset failed");
         set = &fudged_set;
     }
     return(REAL_FUNC(pthread_sigmask)(how, set, oset));
@@ -1367,13 +1365,13 @@ GC_API int GC_CALL GC_unregister_my_thread(void)
 /* resources or id anyway.                              */
 GC_INNER_PTHRSTART void GC_thread_exit_proc(void *arg)
 {
+    IF_CANCEL(int cancel_state;)
+    DCL_LOCK_STATE;
+
 #   ifdef DEBUG_THREADS
         GC_log_printf("Called GC_thread_exit_proc on %p, gc_thread = %p\n",
                       (void *)((GC_thread)arg)->id, arg);
 #   endif
-    IF_CANCEL(int cancel_state;)
-    DCL_LOCK_STATE;
-
     LOCK();
     DISABLE_CANCEL(cancel_state);
     GC_wait_for_gc_completion(FALSE);
@@ -1704,14 +1702,17 @@ GC_API int WRAP_FUNC(pthread_create)(pthread_t *new_thread,
       {
         size_t stack_size = 0;
         if (NULL != attr) {
-           pthread_attr_getstacksize(attr, &stack_size);
+          if (pthread_attr_getstacksize(attr, &stack_size) != 0)
+            ABORT("pthread_attr_getstacksize failed");
         }
         if (0 == stack_size) {
            pthread_attr_t my_attr;
 
-           pthread_attr_init(&my_attr);
-           pthread_attr_getstacksize(&my_attr, &stack_size);
-           pthread_attr_destroy(&my_attr);
+           if (pthread_attr_init(&my_attr) != 0)
+             ABORT("pthread_attr_init failed");
+           if (pthread_attr_getstacksize(&my_attr, &stack_size) != 0)
+             ABORT("pthread_attr_getstacksize failed");
+           (void)pthread_attr_destroy(&my_attr);
         }
         /* On Solaris 10, with default attr initialization,     */
         /* stack_size remains 0.  Fudge it.                     */
@@ -2010,9 +2011,60 @@ GC_INNER void GC_lock(void)
 
 static pthread_cond_t builder_cv = PTHREAD_COND_INITIALIZER;
 
+#ifdef GLIBC_2_19_TSX_BUG
+  /* Parse string like <major>[.<minor>[<tail>]] and return major value. */
+  static int parse_version(int *pminor, const char *pverstr) {
+    char *endp;
+    unsigned long value = strtoul(pverstr, &endp, 10);
+    int major = (int)value;
+
+    if (major < 0 || (char *)pverstr == endp || (unsigned)major != value) {
+      /* Parse error */
+      return -1;
+    }
+    if (*endp != '.') {
+      /* No minor part. */
+      *pminor = -1;
+    } else {
+      value = strtoul(endp + 1, &endp, 10);
+      *pminor = (int)value;
+      if (*pminor < 0 || (unsigned)(*pminor) != value) {
+        return -1;
+      }
+    }
+    return major;
+  }
+#endif /* GLIBC_2_19_TSX_BUG */
+
+static void setup_mark_lock(void)
+{
+# ifdef GLIBC_2_19_TSX_BUG
+    pthread_mutexattr_t mattr;
+    int glibc_minor = -1;
+    int glibc_major = parse_version(&glibc_minor, gnu_get_libc_version());
+
+    if (glibc_major > 2 || (glibc_major == 2 && glibc_minor >= 19)) {
+      /* TODO: disable this workaround for glibc with fixed TSX */
+      /* This disables lock elision to workaround a bug in glibc 2.19+  */
+      if (0 != pthread_mutexattr_init(&mattr)) {
+        ABORT("pthread_mutexattr_init failed");
+      }
+      if (0 != pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_NORMAL)) {
+        ABORT("pthread_mutexattr_settype failed");
+      }
+      if (0 != pthread_mutex_init(&mark_mutex, &mattr)) {
+        ABORT("pthread_mutex_init failed");
+      }
+      (void)pthread_mutexattr_destroy(&mattr);
+    }
+# endif
+}
+
 GC_INNER void GC_acquire_mark_lock(void)
 {
-    GC_ASSERT(GC_mark_lock_holder != NUMERIC_THREAD_ID(pthread_self()));
+#   ifdef NUMERIC_THREAD_ID_UNIQUE
+      GC_ASSERT(GC_mark_lock_holder != NUMERIC_THREAD_ID(pthread_self()));
+#   endif
     GC_generic_lock(&mark_mutex);
     SET_MARK_LOCK_HOLDER;
 }

@@ -46,9 +46,8 @@ GC_INNER ptr_t GC_alloc_large(size_t lb, int k, unsigned flags)
     ptr_t result;
     GC_bool retry = FALSE;
 
-    /* Round up to a multiple of a granule. */
-      lb = (lb + GRANULE_BYTES - 1) & ~(GRANULE_BYTES - 1);
-    n_blocks = OBJ_SZ_TO_BLOCKS(lb);
+    lb = ROUNDUP_GRANULE_SIZE(lb);
+    n_blocks = OBJ_SZ_TO_BLOCKS_CHECKED(lb);
     if (!EXPECT(GC_is_initialized, TRUE)) GC_init();
     /* Do our share of marking work */
         if (GC_incremental && !GC_dont_gc)
@@ -85,10 +84,11 @@ GC_INNER ptr_t GC_alloc_large(size_t lb, int k, unsigned flags)
 STATIC ptr_t GC_alloc_large_and_clear(size_t lb, int k, unsigned flags)
 {
     ptr_t result = GC_alloc_large(lb, k, flags);
-    word n_blocks = OBJ_SZ_TO_BLOCKS(lb);
 
     if (0 == result) return 0;
     if (GC_debugging_started || GC_obj_kinds[k].ok_init) {
+        word n_blocks = OBJ_SZ_TO_BLOCKS(lb);
+
         /* Clear the whole block, in case of GC_realloc call. */
         BZERO(result, n_blocks * HBLKSIZE);
     }
@@ -140,17 +140,19 @@ GC_INNER void * GC_generic_malloc_inner(size_t lb, int k)
         GC_bytes_allocd += GRANULES_TO_BYTES(lg);
     } else {
         op = (ptr_t)GC_alloc_large_and_clear(ADD_SLOP(lb), k, 0);
-        GC_bytes_allocd += lb;
+        if (op != NULL)
+            GC_bytes_allocd += lb;
     }
 
     return op;
 }
 
-/* Allocate a composite object of size n bytes.  The caller guarantees  */
-/* that pointers past the first page are not relevant.  Caller holds    */
-/* allocation lock.                                                     */
-GC_INNER void * GC_generic_malloc_inner_ignore_off_page(size_t lb, int k)
-{
+#if defined(DBG_HDRS_ALL) || defined(GC_GCJ_SUPPORT) \
+    || !defined(GC_NO_FINALIZATION)
+  /* Allocate a composite object of size n bytes.  The caller           */
+  /* guarantees that pointers past the first page are not relevant.     */
+  GC_INNER void * GC_generic_malloc_inner_ignore_off_page(size_t lb, int k)
+  {
     word lb_adjusted;
     void * op;
 
@@ -158,9 +160,11 @@ GC_INNER void * GC_generic_malloc_inner_ignore_off_page(size_t lb, int k)
         return(GC_generic_malloc_inner(lb, k));
     lb_adjusted = ADD_SLOP(lb);
     op = GC_alloc_large_and_clear(lb_adjusted, k, IGNORE_OFF_PAGE);
-    GC_bytes_allocd += lb_adjusted;
+    if (op != NULL)
+        GC_bytes_allocd += lb_adjusted;
     return op;
-}
+  }
+#endif
 
 #ifdef GC_COLLECT_AT_MALLOC
   /* Parameter to force GC at every malloc of size greater or equal to  */
@@ -168,7 +172,7 @@ GC_INNER void * GC_generic_malloc_inner_ignore_off_page(size_t lb, int k)
   size_t GC_dbg_collect_at_malloc_min_lb = (GC_COLLECT_AT_MALLOC);
 #endif
 
-GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
+GC_API GC_ATTR_MALLOC void * GC_CALL GC_generic_malloc(size_t lb, int k)
 {
     void * result;
     DCL_LOCK_STATE;
@@ -189,8 +193,6 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
 
         lg = ROUNDED_UP_GRANULES(lb);
         lb_rounded = GRANULES_TO_BYTES(lg);
-        if (lb_rounded < lb)
-            return((*GC_get_oom_fn())(lb));
         n_blocks = OBJ_SZ_TO_BLOCKS(lb_rounded);
         init = GC_obj_kinds[k].ok_init;
         LOCK();
@@ -208,8 +210,8 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
                 ((word *)result)[GRANULES_TO_WORDS(lg)-2] = 0;
 #           endif
           }
+          GC_bytes_allocd += lb_rounded;
         }
-        GC_bytes_allocd += lb_rounded;
         UNLOCK();
         if (init && !GC_debugging_started && 0 != result) {
             BZERO(result, n_blocks * HBLKSIZE);
@@ -226,7 +228,7 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
 #ifdef THREAD_LOCAL_ALLOC
   GC_INNER void * GC_core_malloc_atomic(size_t lb)
 #else
-  GC_API void * GC_CALL GC_malloc_atomic(size_t lb)
+  GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_atomic(size_t lb)
 #endif
 {
     void *op;
@@ -256,7 +258,7 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
 #ifdef THREAD_LOCAL_ALLOC
   GC_INNER void * GC_core_malloc(size_t lb)
 #else
-  GC_API void * GC_CALL GC_malloc(size_t lb)
+  GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc(size_t lb)
 #endif
 {
     void *op;
@@ -289,7 +291,7 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
 }
 
 /* Allocate lb bytes of pointerful, traced, but not collectible data.   */
-GC_API void * GC_CALL GC_malloc_uncollectable(size_t lb)
+GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_uncollectable(size_t lb)
 {
     void *op;
     void **opp;
@@ -309,7 +311,7 @@ GC_API void * GC_CALL GC_malloc_uncollectable(size_t lb)
             *opp = obj_link(op);
             obj_link(op) = 0;
             GC_bytes_allocd += GRANULES_TO_BYTES(lg);
-            /* Mark bit ws already set on free list.  It will be        */
+            /* Mark bit was already set on free list.  It will be       */
             /* cleared only temporarily during a collection, as a       */
             /* result of the normal free list mark bit clearing.        */
             GC_non_gc_bytes += GRANULES_TO_BYTES(lg);
@@ -380,7 +382,10 @@ void * malloc(size_t lb)
 
   STATIC void GC_init_lib_bounds(void)
   {
+    IF_CANCEL(int cancel_state;)
+
     if (GC_libpthread_start != 0) return;
+    DISABLE_CANCEL(cancel_state);
     GC_init(); /* if not called yet */
     if (!GC_text_mapping("libpthread-",
                          &GC_libpthread_start, &GC_libpthread_end)) {
@@ -393,23 +398,15 @@ void * malloc(size_t lb)
     if (!GC_text_mapping("ld-", &GC_libld_start, &GC_libld_end)) {
         WARN("Failed to find ld.so text mapping: Expect crash\n", 0);
     }
+    RESTORE_CANCEL(cancel_state);
   }
 #endif /* GC_LINUX_THREADS */
-
-#include <limits.h>
-#ifdef SIZE_MAX
-# define GC_SIZE_MAX SIZE_MAX
-#else
-# define GC_SIZE_MAX (~(size_t)0)
-#endif
-
-#define GC_SQRT_SIZE_MAX ((1U << (WORDSZ / 2)) - 1)
 
 void * calloc(size_t n, size_t lb)
 {
     if ((lb | n) > GC_SQRT_SIZE_MAX /* fast initial test */
         && lb && n > GC_SIZE_MAX / lb)
-      return NULL;
+      return (*GC_get_oom_fn())(GC_SIZE_MAX); /* n*lb overflow */
 #   if defined(GC_LINUX_THREADS) /* && !defined(USE_PROC_FOR_LIBRARIES) */
         /* libpthread allocated some memory that is only pointed to by  */
         /* mmapped thread stacks.  Make sure it is not collectible.     */

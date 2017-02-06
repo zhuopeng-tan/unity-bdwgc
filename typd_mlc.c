@@ -41,8 +41,6 @@
 
 #define TYPD_EXTRA_BYTES (sizeof(word) - EXTRA_BYTES)
 
-STATIC GC_bool GC_explicit_typing_initialized = FALSE;
-
 STATIC int GC_explicit_kind = 0;
                         /* Object kind for objects with indirect        */
                         /* (possibly extended) descriptors.             */
@@ -99,6 +97,18 @@ STATIC size_t GC_avail_descr = 0;       /* Next available slot.         */
 
 STATIC int GC_typed_mark_proc_index = 0; /* Indices of my mark          */
 STATIC int GC_array_mark_proc_index = 0; /* procedures.                 */
+
+#if !defined(AO_HAVE_load_acquire) && defined(GC_FORCE_INCLUDE_ATOMIC_OPS)
+# include "atomic_ops.h"
+#endif
+
+STATIC
+# ifdef AO_HAVE_load_acquire
+    AO_t
+# else
+    GC_bool
+# endif
+  GC_explicit_typing_initialized = FALSE;
 
 STATIC void GC_push_typed_structures_proc(void)
 {
@@ -344,19 +354,11 @@ STATIC mse * GC_typed_mark_proc(word * addr, mse * mark_stack_ptr,
 STATIC mse * GC_array_mark_proc(word * addr, mse * mark_stack_ptr,
                                 mse * mark_stack_limit, word env);
 
-/* Caller does not hold allocation lock. */
 STATIC void GC_init_explicit_typing(void)
 {
-    register unsigned i;
-    DCL_LOCK_STATE;
+    unsigned i;
 
     GC_STATIC_ASSERT(sizeof(struct LeafDescriptor) % sizeof(word) == 0);
-    LOCK();
-    if (GC_explicit_typing_initialized) {
-      UNLOCK();
-      return;
-    }
-    GC_explicit_typing_initialized = TRUE;
     /* Set up object kind with simple indirect descriptor. */
       GC_eobjfreelist = (ptr_t *)GC_new_free_list_inner();
       GC_explicit_kind = GC_new_kind_inner(
@@ -372,10 +374,10 @@ STATIC void GC_init_explicit_typing(void)
                             (void **)GC_arobjfreelist,
                             GC_MAKE_PROC(GC_array_mark_proc_index, 0),
                             FALSE, TRUE);
-      for (i = 0; i < WORDSZ/2; i++) {
+      GC_bm_table[0] = GC_DS_BITMAP;
+      for (i = 1; i < WORDSZ/2; i++) {
           GC_bm_table[i] = (((word)-1) << (WORDSZ - i)) | GC_DS_BITMAP;
       }
-    UNLOCK();
 }
 
 STATIC mse * GC_typed_mark_proc(word * addr, mse * mark_stack_ptr,
@@ -537,9 +539,26 @@ GC_API GC_descr GC_CALL GC_make_descriptor(const GC_word * bm, size_t len)
     GC_descr result;
     signed_word i;
 #   define HIGH_BIT (((word)1) << (WORDSZ - 1))
+    DCL_LOCK_STATE;
 
-    if (!EXPECT(GC_explicit_typing_initialized, TRUE))
-      GC_init_explicit_typing();
+#   if defined(THREADS) && defined(AO_HAVE_load_acquire)
+      if (!EXPECT(AO_load_acquire(
+                        (volatile AO_t *)&GC_explicit_typing_initialized),
+                  TRUE))
+#   endif
+    {
+      LOCK();
+#     if defined(THREADS) && defined(AO_HAVE_load_acquire)
+        if (!GC_explicit_typing_initialized)
+#     else
+        if (!EXPECT(GC_explicit_typing_initialized, TRUE))
+#     endif
+      {
+        GC_init_explicit_typing();
+        GC_explicit_typing_initialized = TRUE;
+      }
+      UNLOCK();
+    }
 
     while (last_set_bit >= 0 && !GC_get_bit(bm, last_set_bit))
       last_set_bit--;
@@ -581,15 +600,17 @@ GC_API GC_descr GC_CALL GC_make_descriptor(const GC_word * bm, size_t len)
     }
 }
 
-GC_API void * GC_CALL GC_malloc_explicitly_typed(size_t lb, GC_descr d)
+GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_explicitly_typed(size_t lb,
+                                                                GC_descr d)
 {
     ptr_t op;
     ptr_t * opp;
     size_t lg;
     DCL_LOCK_STATE;
 
-    lb += TYPD_EXTRA_BYTES;
-    if(SMALL_OBJ(lb)) {
+    GC_ASSERT(GC_explicit_typing_initialized);
+    lb = SIZET_SAT_ADD(lb, TYPD_EXTRA_BYTES);
+    if (SMALL_OBJ(lb)) {
         GC_DBG_COLLECT_AT_MALLOC(lb);
         lg = GC_size_map[lb];
         opp = &(GC_eobjfreelist[lg]);
@@ -617,16 +638,17 @@ GC_API void * GC_CALL GC_malloc_explicitly_typed(size_t lb, GC_descr d)
    return((void *) op);
 }
 
-GC_API void * GC_CALL GC_malloc_explicitly_typed_ignore_off_page(size_t lb,
-                                                                 GC_descr d)
+GC_API GC_ATTR_MALLOC void * GC_CALL
+    GC_malloc_explicitly_typed_ignore_off_page(size_t lb, GC_descr d)
 {
     ptr_t op;
     ptr_t * opp;
     size_t lg;
     DCL_LOCK_STATE;
 
-    lb += TYPD_EXTRA_BYTES;
-    if( SMALL_OBJ(lb) ) {
+    GC_ASSERT(GC_explicit_typing_initialized);
+    lb = SIZET_SAT_ADD(lb, TYPD_EXTRA_BYTES);
+    if (SMALL_OBJ(lb)) {
         GC_DBG_COLLECT_AT_MALLOC(lb);
         lg = GC_size_map[lb];
         opp = &(GC_eobjfreelist[lg]);
@@ -654,8 +676,8 @@ GC_API void * GC_CALL GC_malloc_explicitly_typed_ignore_off_page(size_t lb,
    return((void *) op);
 }
 
-GC_API void * GC_CALL GC_calloc_explicitly_typed(size_t n, size_t lb,
-                                                 GC_descr d)
+GC_API GC_ATTR_MALLOC void * GC_CALL GC_calloc_explicitly_typed(size_t n,
+                                                        size_t lb, GC_descr d)
 {
     ptr_t op;
     ptr_t * opp;
@@ -666,18 +688,23 @@ GC_API void * GC_CALL GC_calloc_explicitly_typed(size_t n, size_t lb,
     struct LeafDescriptor leaf;
     DCL_LOCK_STATE;
 
-    descr_type = GC_make_array_descriptor((word)n, (word)lb, d,
-                                          &simple_descr, &complex_descr, &leaf);
+    GC_ASSERT(GC_explicit_typing_initialized);
+    descr_type = GC_make_array_descriptor((word)n, (word)lb, d, &simple_descr,
+                                          &complex_descr, &leaf);
+    if ((lb | n) > GC_SQRT_SIZE_MAX /* fast initial check */
+        && lb > 0 && n > GC_SIZE_MAX / lb)
+      return (*GC_get_oom_fn())(GC_SIZE_MAX); /* n*lb overflow */
+    lb *= n;
     switch(descr_type) {
         case NO_MEM: return(0);
-        case SIMPLE: return(GC_malloc_explicitly_typed(n*lb, simple_descr));
+        case SIMPLE:
+            return GC_malloc_explicitly_typed(lb, simple_descr);
         case LEAF:
-            lb *= n;
-            lb += sizeof(struct LeafDescriptor) + TYPD_EXTRA_BYTES;
+            lb = SIZET_SAT_ADD(lb,
+                        sizeof(struct LeafDescriptor) + TYPD_EXTRA_BYTES);
             break;
         case COMPLEX:
-            lb *= n;
-            lb += TYPD_EXTRA_BYTES;
+            lb = SIZET_SAT_ADD(lb, TYPD_EXTRA_BYTES);
             break;
     }
     if( SMALL_OBJ(lb) ) {
@@ -726,9 +753,7 @@ GC_API void * GC_CALL GC_calloc_explicitly_typed(size_t n, size_t lb,
 #    endif
        {
            /* Couldn't register it due to lack of memory.  Punt.        */
-           /* This will probably fail too, but gives the recovery code  */
-           /* a chance.                                                 */
-           return(GC_malloc(n*lb));
+            return (*GC_get_oom_fn())(lb);
        }
    }
    return((void *) op);

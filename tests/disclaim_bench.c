@@ -53,7 +53,7 @@ testobj_t testobj_new(int model)
         case 0:
             obj = GC_MALLOC(sizeof(struct testobj_s));
             if (obj != NULL)
-              GC_register_finalizer_no_order(obj, testobj_finalize,
+              GC_REGISTER_FINALIZER_NO_ORDER(obj, testobj_finalize,
                                              &free_count, NULL, NULL);
             break;
         case 1:
@@ -91,9 +91,6 @@ int main(int argc, char **argv)
 
     GC_INIT();
     GC_init_finalized_malloc();
-
-    keep_arr = GC_MALLOC(sizeof(void *)*KEEP_CNT);
-
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         fprintf(stderr,
                 "Usage: %s [FINALIZATION_MODEL]\n"
@@ -112,15 +109,21 @@ int main(int argc, char **argv)
         model_max = 2;
     }
 
+    keep_arr = GC_MALLOC(sizeof(void *) * KEEP_CNT);
+    if (NULL == keep_arr) {
+        fprintf(stderr, "Out of memory!\n");
+        exit(3);
+    }
+
     printf("\t\t\tfin. ratio       time/s    time/fin.\n");
     for (model = model_min; model <= model_max; ++model) {
         double t = 0.0;
-        free_count = 0;
-
 #       ifdef CLOCK_TYPE
             CLOCK_TYPE tI, tF;
+
             GET_TIME(tI);
 #       endif
+        free_count = 0;
         for (i = 0; i < ALLOC_CNT; ++i) {
             int k = rand() % KEEP_CNT;
             keep_arr[k] = testobj_new(model);
@@ -131,11 +134,11 @@ int main(int argc, char **argv)
             t = MS_TIME_DIFF(tF, tI)*1e-3;
 #       endif
 
-        if (model < 2)
-            printf("%20s: %12.4lf %12lg %12lg\n", model_str[model],
+        if (model < 2 && free_count > 0)
+            printf("%20s: %12.4f %12g %12g\n", model_str[model],
                    free_count/(double)ALLOC_CNT, t, t/free_count);
         else
-            printf("%20s: %12.4lf %12lg %12s\n",
+            printf("%20s: %12.4f %12g %12s\n",
                    model_str[model], 0.0, t, "N/A");
     }
     return 0;

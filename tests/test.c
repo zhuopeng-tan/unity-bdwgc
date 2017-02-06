@@ -28,6 +28,7 @@
 #  define GC_DEBUG
 #endif
 
+#undef GC_NO_THREAD_REDIRECTS
 #include "gc.h"
 
 #ifndef NTHREADS /* Number of additional threads to fork. */
@@ -96,6 +97,8 @@
 
 # ifndef NO_TEST_HANDLE_FORK
 #   include <unistd.h>
+#   include <sys/types.h>
+#   include <sys/wait.h>
 #   ifdef HANDLE_FORK
 #     define INIT_FORK_SUPPORT GC_set_handle_fork(1)
                 /* Causes abort in GC_init on pthread_atfork failure.   */
@@ -116,7 +119,7 @@
 
 # include <stdarg.h>
 
-#define CHECH_GCLIB_VERSION \
+#define CHECK_GCLIB_VERSION \
             if (GC_get_version() != ((GC_VERSION_MAJOR<<16) \
                                     | (GC_VERSION_MINOR<<8) \
                                     | GC_VERSION_MICRO)) { \
@@ -135,7 +138,7 @@
 #endif
 
 #define GC_COND_INIT() \
-    INIT_FORK_SUPPORT; GC_OPT_INIT; CHECH_GCLIB_VERSION; INIT_PRINT_STATS
+    INIT_FORK_SUPPORT; GC_OPT_INIT; CHECK_GCLIB_VERSION; INIT_PRINT_STATS
 
 #define CHECK_OUT_OF_MEMORY(p) \
             if ((p) == NULL) { \
@@ -155,7 +158,7 @@ int realloc_count = 0;
 
   void GC_amiga_free_all_mem(void);
   void Amiga_Fail(void){GC_amiga_free_all_mem();abort();}
-# define FAIL (void)Amiga_Fail()
+# define FAIL Amiga_Fail()
   void *GC_amiga_gctest_malloc_explicitly_typed(size_t lb, GC_descr d){
     void *ret=GC_malloc_explicitly_typed(lb,d);
     if(ret==NULL){
@@ -188,7 +191,7 @@ int realloc_count = 0;
 #else /* !AMIGA_FASTALLOC */
 
 # if defined(PCR) || defined(LINT2)
-#   define FAIL (void)abort()
+#   define FAIL abort()
 # else
 #   define FAIL ABORT("Test failed")
 # endif
@@ -358,7 +361,7 @@ sexpr reverse1(sexpr x, sexpr y)
 sexpr reverse(sexpr x)
 {
 #   ifdef TEST_WITH_SYSTEM_MALLOC
-      malloc(100000);
+      GC_noop1(GC_HIDE_POINTER(malloc(100000)));
 #   endif
     return( reverse1(x, nil) );
 }
@@ -412,6 +415,10 @@ sexpr uncollectable_ints(int low, int up)
 
 void check_ints(sexpr list, int low, int up)
 {
+    if (is_nil(list)) {
+        GC_printf("list is nil\n");
+        FAIL;
+    }
     if (SEXPR_TO_INT(car(car(list))) != low) {
         GC_printf(
            "List reversal produced incorrect list - collector is broken\n");
@@ -1148,6 +1155,10 @@ void run_one_test(void)
     CLOCK_TYPE reverse_time;
     CLOCK_TYPE tree_time;
     unsigned long time_diff;
+#   ifndef NO_TEST_HANDLE_FORK
+      pid_t pid;
+      int wstatus;
+#   endif
 
 #   ifdef FIND_LEAK
         GC_printf(
@@ -1222,6 +1233,7 @@ void run_one_test(void)
         FAIL;
       }
       z = GC_malloc(8);
+      CHECK_OUT_OF_MEMORY(z);
       GC_PTR_STORE(z, x);
       if (*z != x) {
         GC_printf("GC_PTR_STORE failed: %p != %p\n", (void *)(*z), (void *)x);
@@ -1309,10 +1321,23 @@ void run_one_test(void)
         GC_free(GC_malloc_atomic(0));
 #   ifndef NO_TEST_HANDLE_FORK
         GC_atfork_prepare();
-        if (fork() != 0) {
+        pid = fork();
+        if (pid != 0) {
           GC_atfork_parent();
+          if (pid == -1) {
+            GC_printf("Process fork failed\n");
+            FAIL;
+          }
           if (print_stats)
-            GC_log_printf("Forked child process (or failed)\n");
+            GC_log_printf("Forked child process\n");
+          if (waitpid(pid, &wstatus, 0) == -1) {
+            GC_printf("Wait for child process failed\n");
+            FAIL;
+          }
+          if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus) != 0) {
+            GC_printf("Child process failed, status= 0x%x\n", wstatus);
+            FAIL;
+          }
         } else {
           GC_atfork_child();
           if (print_stats)
@@ -1499,7 +1524,7 @@ void check_heap_stats(void)
                   (unsigned long)GC_get_total_bytes());
     GC_printf("Final heap size is %lu bytes\n",
                   (unsigned long)GC_get_heap_size());
-    if (GC_get_total_bytes() < n_tests *
+    if (GC_get_total_bytes() < (size_t)n_tests *
 #   ifdef VERY_SMALL_CONFIG
         2700000
 #   else
@@ -1852,11 +1877,17 @@ int main(void)
 #   endif
     GC_COND_INIT();
 
-    pthread_attr_init(&attr);
+    if ((code = pthread_attr_init(&attr)) != 0) {
+      GC_printf("pthread_attr_init failed, error=%d\n", code);
+      FAIL;
+    }
 #   if defined(GC_IRIX_THREADS) || defined(GC_FREEBSD_THREADS) \
         || defined(GC_DARWIN_THREADS) || defined(GC_AIX_THREADS) \
         || defined(GC_OPENBSD_THREADS)
-        pthread_attr_setstacksize(&attr, 1000000);
+        if ((code = pthread_attr_setstacksize(&attr, 1000 * 1024)) != 0) {
+          GC_printf("pthread_attr_setstacksize failed, error=%d\n", code);
+          FAIL;
+        }
 #   endif
     n_tests = 0;
 #   if (defined(MPROTECT_VDB)) && !defined(REDIRECT_MALLOC) \
@@ -1894,7 +1925,7 @@ int main(void)
     }
     check_heap_stats();
     (void)fflush(stdout);
-    pthread_attr_destroy(&attr);
+    (void)pthread_attr_destroy(&attr);
 #   ifdef PTW32_STATIC_LIB
         pthread_win32_thread_detach_np ();
         pthread_win32_process_detach_np ();

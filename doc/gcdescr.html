@@ -272,7 +272,7 @@ each call, so that it can also be used by the incremental collector.
 It is fairly carefully tuned, since it usually consumes a large majority
 of the garbage collection time.
 <P>
-The fact that it perform a only a small amount of work per call also
+The fact that it performs only a small amount of work per call also
 allows it to be used as the core routine of the parallel marker.  In that
 case it is normally invoked on thread-private mark stacks instead of the
 global mark stack.  More details can be found in
@@ -425,7 +425,7 @@ Java-style unordered finalization, and to ignore certain kinds of cycles,
 
 <H2>Generational Collection and Dirty Bits</h2>
 We basically use the concurrent and generational GC algorithm described in
-<A HREF="http://www.hpl.hp.com/personal/Hans_Boehm/gc/papers/pldi91.ps.Z">"Mostly Parallel Garbage Collection"</a>,
+<A HREF="http://www.hboehm.info/gc/papers/pldi91.ps.Z">"Mostly Parallel Garbage Collection"</a>,
 by Boehm, Demers, and Shenker.
 <P>
 The most significant modification is that
@@ -534,22 +534,15 @@ common Pthreads implementations.
 In particular, it is very difficult for the collector to stop all other
 threads in the system and examine the register contents.  This is currently
 accomplished with very different mechanisms for some Pthreads
-implementations.  The Solaris implementation temporarily disables much
-of the user-level threads implementation by stopping kernel-level threads
-("lwp"s).  The Linux/HPUX/OSF1 and Irix implementations sends signals to
+implementations.  For Linux/HPUX/OSF1, Solaris and Irix it sends signals to
 individual Pthreads and has them wait in the signal handler.
 <P>
 The Linux and Irix implementations use
 only documented Pthreads calls, but rely on extensions to their semantics.
-The Linux implementation <TT>linux_threads.c</tt> relies on only very
+The Linux implementation <TT>pthread_stop_world.c</tt> relies on only very
 mild extensions to the pthreads semantics, and already supports a large number
 of other Unix-like pthreads implementations.  Our goal is to make this the
 only pthread support in the collector.
-<P>
-(The Irix implementation is separate only for historical reasons and should
-clearly be merged.  The current Solaris implementation probably performs
-better in the uniprocessor case, but does not support thread operations in the
-collector.  Hence it cannot support the parallel marker.)
 <P>
 All implementations must
 intercept thread creation and a few other thread-specific calls to allow
@@ -616,17 +609,13 @@ GC versions before 7 do not invoke the thread-local allocator by default.
 For some more details see <A HREF="scale.html">here</a>, and the
 technical report entitled
 <A HREF="http://www.hpl.hp.com/techreports/2000/HPL-2000-165.html">
-``Fast Multiprocessor Memory Allocation and Garbage Collection''
-</a>
+"Fast Multiprocessor Memory Allocation and Garbage Collection"</a>
 <P>
 <HR>
 <P>
 Comments are appreciated.  Please send mail to
-<A HREF="mailto:gc@linux.hpl.hp.com"><tt>gc@linux.hpl.hp.com</tt></a>
+<A HREF="mailto:bdwgc@lists.opendylan.org"><tt>bdwgc@lists.opendylan.org</tt></a>
 (GC mailing list) or
-<A HREF="mailto:Hans.Boehm@hp.com"><TT>Hans.Boehm@hp.com</tt></a>
-<P>
-This is a modified copy of a page written while the author was at SGI.
-The original was <A HREF="http://reality.sgi.com/boehm/gcdescr.html">here</a>.
+<A HREF="mailto:boehm@acm.org"><TT>boehm@acm.org</tt></a>
 </body>
 </html>

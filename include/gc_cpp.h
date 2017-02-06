@@ -21,7 +21,7 @@ C++ Interface to the Boehm Collector
 
 This interface provides access to the Boehm collector.  It provides
 basic facilities similar to those described in "Safe, Efficient
-Garbage Collection for C++", by John R. Elis and David L. Detlefs
+Garbage Collection for C++", by John R. Ellis and David L. Detlefs
 (ftp://ftp.parc.xerox.com/pub/ellis/gc).
 
 All heap-allocated objects are either "collectible" or
@@ -424,13 +424,5 @@ inline void* operator new( size_t size, GC_NS_QUALIFY(GCPlacement) gcp,
     return ::operator new( size, gcp, cleanup, clientData );
   }
 #endif /* GC_OPERATOR_NEW_ARRAY */
-
-#if defined(__CYGWIN__)
-# include <new> // for delete throw()
-  inline void operator delete(void *p)
-  {
-    GC_FREE(p);
-  }
-#endif
 
 #endif /* GC_CPP_H */
