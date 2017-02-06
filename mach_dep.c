@@ -14,6 +14,9 @@
 
 #include "private/gc_priv.h"
 
+#ifndef SN_TARGET_PSP2
+#ifndef SN_TARGET_ORBIS
+
 #include <stdio.h>
 
 #ifdef AMIGA
@@ -181,6 +184,11 @@
       }
 #     define HAVE_PUSH_REGS
 #   endif /* __MWERKS__ */
+# elif defined(EMSCRIPTEN)
+      void GC_push_regs(void)
+      {
+      }
+#     define HAVE_PUSH_REGS
 # endif /* MACOS */
 
 #endif /* !USE_ASM_PUSH_REGS */
@@ -309,3 +317,5 @@ GC_INNER void GC_with_callee_saves_pushed(void (*fn)(ptr_t, void *),
     /* The real version is in a .S file */
 # endif
 #endif /* ASM_CLEAR_CODE */
+#endif /* SN_TARGET_ORBIS */
+#endif /* SN_TARGET_PSP2 */

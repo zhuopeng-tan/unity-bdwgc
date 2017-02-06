@@ -37,9 +37,17 @@
 
 /* Machine specific parts contributed by various people.  See README file. */
 
+#if defined(SN_TARGET_ORBIS)	
+#	undef __FreeBSD__	// Orbis compiler defines __FreeBSD__
+#endif
+
 #if defined(__ANDROID__) && !defined(PLATFORM_ANDROID)
   /* __ANDROID__ macro is defined by Android NDK gcc.   */
 # define PLATFORM_ANDROID 1
+#endif
+
+#if defined(TIZEN) && !defined(PLATFORM_TIZEN)
+# define PLATFORM_TIZEN 1
 #endif
 
 #if defined(__SYMBIAN32__) && !defined(SYMBIAN)
@@ -97,7 +105,7 @@
 # endif
 # if defined(__aarch64__)
 #    define AARCH64
-#    if !defined(LINUX)
+#    if !defined(LINUX) && !defined(DARWIN) && !defined(NN_BUILD_TARGET_PLATFORM_NX)
 #      define NOSYS
 #      define mach_type_known
 #    endif
@@ -106,7 +114,9 @@
 #    define ARM32
 #    if !defined(LINUX) && !defined(NETBSD) && !defined(FREEBSD) \
         && !defined(OPENBSD) && !defined(DARWIN) \
-        && !defined(_WIN32) && !defined(__CEGCC__) && !defined(SYMBIAN)
+        && !defined(_WIN32) && !defined(__CEGCC__) && !defined(SYMBIAN) \
+        && !defined(NN_PLATFORM_CTR) && !defined(NN_BUILD_TARGET_PLATFORM_NX) \
+		&& !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)      
 #      define NOSYS
 #      define mach_type_known
 #    endif
@@ -368,6 +378,10 @@
 #    define ARM32
 #    define mach_type_known
 #    define DARWIN_DONT_PARSE_STACK
+#   elif defined(__aarch64__)
+#    define AARCH64
+#    define mach_type_known
+#    define DARWIN_DONT_PARSE_STACK
 #   endif
 # endif
 # if defined(__rtems__) && (defined(i386) || defined(__i386__))
@@ -402,7 +416,7 @@
 #   define I386
 #   define mach_type_known
 # endif
-# if defined(FREEBSD) && (defined(__amd64__) || defined(__x86_64__))
+# if defined(FREEBSD) && (defined(__amd64__) || defined(__x86_64__)) || defined(SN_TARGET_ORBIS)
 #   define X86_64
 #   define mach_type_known
 # endif
@@ -461,10 +475,19 @@
            && !defined(SYMBIAN))
 #     if defined(__LP64__) || defined(_WIN64)
 #       define X86_64
-#     else
+#     elif defined(_M_IX86)
 #       define I386
+#     elif defined(_M_ARM)
+#        define ARM32
+#     else
+#       error Unknown windows architecture
 #     endif
+#if !defined(_XBOX_ONE)
 #     define MSWIN32    /* or Win64 */
+#     if defined(WINAPI_FAMILY) && (WINAPI_FAMILY == WINAPI_FAMILY_APP)
+#         define MSWINRT
+#     endif
+#endif
 #     define mach_type_known
 #   endif
 #   if defined(_MSC_VER) && defined(_M_IA64)
@@ -551,6 +574,32 @@
 # endif
 
 # if defined(SYMBIAN)
+#   define mach_type_known
+# endif
+
+# if defined(SN_TARGET_ORBIS)
+#   define mach_type_known
+# endif
+
+# if defined(SN_TARGET_PSP2)
+#	undef USE_MMAP
+#	undef USE_MUNMAP
+#   define mach_type_known
+# endif
+
+# if defined(__EMSCRIPTEN__)
+#   define I386
+#   define ALIGNMENT 4
+#   define mach_type_known
+# endif
+
+# if defined(NN_PLATFORM_CTR)
+#   define ARM32
+#   define mach_type_known
+# endif
+
+# if defined(NN_BUILD_TARGET_PLATFORM_NX)
+#   define NINTENDO_SWITCH
 #   define mach_type_known
 # endif
 
@@ -736,13 +785,22 @@
      && !defined(__INTEL_COMPILER) && !defined(__PATHCC__) \
      && !(defined(POWERPC) && defined(DARWIN)) /* for MacOS X 10.3.9 */ \
      && !defined(RTEMS) \
-     && !defined(__clang__) /* since no-op in clang (3.0) */
+     && !defined(__clang__) /* since no-op in clang (3.0) */ \
+     && !defined(__ARMCC_VERSION) /* doesn't exist in armcc gnu emu */
 #   define HAVE_BUILTIN_UNWIND_INIT
 # endif
 
 # ifdef SYMBIAN
 #   define MACH_TYPE "SYMBIAN"
 #   define OS_TYPE "SYMBIAN"
+#   define CPP_WORDSZ 32
+#   define ALIGNMENT 4
+#   define DATASTART NULL
+#   define DATAEND NULL
+# endif
+
+# ifdef __EMSCRIPTEN__
+#   define OS_TYPE "EMSCRIPTEN"
 #   define CPP_WORDSZ 32
 #   define ALIGNMENT 4
 #   define DATASTART NULL
@@ -788,7 +846,7 @@
 #            if defined(__GLIBC__) && __GLIBC__ >= 2
 #              define SEARCH_FOR_DATA_START
 #            else /* !GLIBC2 */
-#              ifdef PLATFORM_ANDROID
+#              if defined(PLATFORM_ANDROID) || defined(PLATFORM_TIZEN)
 #                define __environ environ
 #              endif
                extern char **__environ;
@@ -1299,7 +1357,7 @@
 #            endif
 #            include <features.h>
 #            if defined(__GLIBC__) && __GLIBC__ >= 2 \
-                || defined(PLATFORM_ANDROID)
+                || defined(PLATFORM_ANDROID) || defined(PLATFORM_TIZEN)
 #                define SEARCH_FOR_DATA_START
 #            else
                  extern char **__environ;
@@ -1315,7 +1373,7 @@
 #            endif
              extern int _end[];
 #            define DATAEND (ptr_t)(_end)
-#            if defined(PLATFORM_ANDROID) && !defined(GC_NO_SIGSETJMP)
+#            if defined(PLATFORM_ANDROID) || defined(PLATFORM_TIZEN) && !defined(GC_NO_SIGSETJMP)
                /* As of Android NDK r8b, _sigsetjmp is still missing    */
                /* for x86 (setjmp is used instead to find data_start).  */
 #              define GC_NO_SIGSETJMP
@@ -1966,6 +2024,28 @@
 #   ifndef HBLKSIZE
 #     define HBLKSIZE 4096
 #   endif
+#   ifdef DARWIN
+      /* iPhone */
+#     define OS_TYPE "DARWIN"
+#     ifndef GC_DONT_REGISTER_MAIN_STATIC_DATA
+#       define DYNAMIC_LOADING
+#     endif
+#     define DATASTART ((ptr_t) get_etext())
+#     define DATAEND   ((ptr_t) get_end())
+#     ifndef USE_MMAP
+#       define USE_MMAP
+#     endif
+#     define USE_MMAP_ANON
+#     define MPROTECT_VDB
+#     include <unistd.h>
+#     define GETPAGESIZE() getpagesize()
+      /* FIXME: There seems to be some issues with trylock hanging on   */
+      /* darwin. This should be looked into some more.                  */
+#     define NO_PTHREAD_TRYLOCK
+#     ifndef NO_DYLD_BIND_FULLY_IMAGE
+#       define NO_DYLD_BIND_FULLY_IMAGE
+#     endif
+#   endif
 #   ifdef LINUX
 #     define OS_TYPE "LINUX"
 #     define LINUX_STACKBOTTOM
@@ -2009,7 +2089,7 @@
 #            define DYNAMIC_LOADING
 #            include <features.h>
 #            if defined(__GLIBC__) && __GLIBC__ >= 2 \
-                || defined(PLATFORM_ANDROID)
+                || defined(PLATFORM_ANDROID) || defined(PLATFORM_TIZEN)
 #                define SEARCH_FOR_DATA_START
 #            else
                  extern char **__environ;
@@ -2081,6 +2161,29 @@
       extern char _end[];
 #     define DATAEND ((ptr_t)(&_end))
 #     define DYNAMIC_LOADING
+#   endif
+#   ifdef SN_TARGET_PSP2
+#	  define NO_HANDLE_FORK
+#     define DATASTART 0
+#     define DATAEND 0
+      void*  psp2_get_stack_bottom ();
+#     define STACKBOTTOM ((ptr_t) psp2_get_stack_bottom ())
+	#endif
+#   ifdef NN_PLATFORM_CTR
+	  extern unsigned char Image$$ZI$$ZI$$Base[];
+#     define DATASTART (ptr_t)(Image$$ZI$$ZI$$Base)
+	  extern unsigned char Image$$ZI$$ZI$$Limit[];
+#     define DATAEND (ptr_t)(Image$$ZI$$ZI$$Limit)
+      void* n3ds_get_stack_bottom(void);
+#     define STACKBOTTOM ((ptr_t) n3ds_get_stack_bottom())
+#   endif
+#   ifdef NINTENDO_SWITCH
+      extern int __bss_end[];
+#     define NO_HANDLE_FORK
+#     define DATASTART 0
+#     define DATAEND (ptr_t)(&__bss_end)
+      void*  switch_get_stack_bottom ();
+#     define STACKBOTTOM ((ptr_t) switch_get_stack_bottom ())
 #   endif
 #   ifdef NOSYS
       /* __data_start is usually defined in the target linker script.  */
@@ -2188,7 +2291,17 @@
 #   ifndef HBLKSIZE
 #     define HBLKSIZE 4096
 #   endif
-#   define CACHE_LINE_SIZE 64
+#   ifndef CACHE_LINE_SIZE
+#     define CACHE_LINE_SIZE 64
+#   endif
+#   ifdef SN_TARGET_ORBIS
+#       define DATASTART 0
+#       define DATAEND 0
+#include <pthread.h>
+    	void*	 ps4_get_stack_bottom ();
+#		define STACKBOTTOM ((ptr_t) ps4_get_stack_bottom ())
+#     define USE_GENERIC_PUSH_REGS 
+#   endif
 #   ifdef OPENBSD
 #       define OS_TYPE "OPENBSD"
 #       define ELF_CLASS ELFCLASS64
@@ -2202,6 +2315,31 @@
         extern char _end[];
 #       define DATAEND ((ptr_t)(&_end))
 #       define DYNAMIC_LOADING
+#   endif
+#   ifdef _XBOX_ONE
+#       define NO_GETENV
+#       define DATASTART 0
+#       ifndef DATAEND
+#           define DATAEND 0
+#       endif
+	  LONG64	 durango_get_stack_bottom ();
+#       ifndef USE_MMAP
+#           define USE_MMAP
+#       endif
+#       ifndef USE_MUNMAP
+#           define USE_MUNMAP
+#       endif
+#		define PROT_NONE       0
+#		define PROT_READ       1
+#		define PROT_WRITE      2
+#		define PROT_EXEC       4
+#		define MAP_PRIVATE     2
+#		define MAP_TYPE        0xf
+#		define MAP_FIXED       0x10
+#		define MAP_FAILED      ((void *)-1)
+#		define STACKBOTTOM ((ptr_t) durango_get_stack_bottom ())
+#       define GETPAGESIZE() 4096
+#     define USE_GENERIC_PUSH_REGS 
 #   endif
 #   ifdef LINUX
 #       define OS_TYPE "LINUX"
@@ -2345,7 +2483,9 @@
 #         define MPROTECT_VDB
 #       endif
 #       define GWW_VDB
-#       define DATAEND  /* not needed */
+#       ifndef DATAEND
+#           define DATAEND  /* not needed */
+#       endif
 #   endif
 # endif /* X86_64 */
 
@@ -2448,7 +2588,7 @@
 # define USE_GET_STACKBASE_FOR_MAIN
 #endif
 
-#if (defined(SVR4) || defined(PLATFORM_ANDROID)) && !defined(GETPAGESIZE)
+#if (defined(SVR4) || defined(PLATFORM_ANDROID) || defined(PLATFORM_TIZEN)) && !defined(GETPAGESIZE)
 # include <unistd.h>
 # define GETPAGESIZE()  sysconf(_SC_PAGESIZE)
 #endif
@@ -2682,13 +2822,13 @@
 #if defined(GC_GNU_THREADS) && !defined(HURD)
 # error --> inconsistent configuration
 #endif
-#if defined(GC_WIN32_THREADS) && !defined(MSWIN32) && !defined(CYGWIN32) \
+#if defined(GC_WIN32_THREADS) && !defined(MSWIN32) && !defined(CYGWIN32) && !defined(_XBOX_ONE) \
     && !defined(MSWINCE)
 # error --> inconsistent configuration
 #endif
 
 #if defined(PCR) || defined(GC_WIN32_THREADS) || defined(GC_PTHREADS) \
-    || defined(SN_TARGET_PS3)
+    || defined(SN_TARGET_PS3) || defined(NN_PLATFORM_CTR)|| defined(SN_TARGET_ORBIS) || defined(SN_TARGET_PSP2) || defined(NN_BUILD_TARGET_PLATFORM_NX)
 # define THREADS
 #endif
 
@@ -2730,7 +2870,7 @@
 #endif
 
 #if defined(CAN_HANDLE_FORK) && !defined(CAN_CALL_ATFORK) \
-    && !defined(HURD) && !defined(PLATFORM_ANDROID)
+    && !defined(HURD) && !defined(PLATFORM_TIZEN) && !defined(PLATFORM_ANDROID) && !defined(SN_TARGET_ORBIS)
   /* Have working pthread_atfork().     */
 # define CAN_CALL_ATFORK
 #endif
@@ -2747,7 +2887,7 @@
 #  define USE_MARK_BYTES
 #endif
 
-#if defined(MSWINCE) && !defined(__CEGCC__) && !defined(NO_GETENV)
+#if (defined(MSWINCE) && !defined(__CEGCC__) && !defined(NO_GETENV)) || defined(MSWINRT)
 # define NO_GETENV
 #endif
 
@@ -2907,6 +3047,9 @@
 #   define GET_MEM(bytes) HBLKPTR((size_t)calloc(1, \
                                             (size_t)(bytes) + GC_page_size) \
                                   + GC_page_size - 1)
+# elif defined(_XBOX_ONE)
+	extern void* durango_get_mem (size_t size, size_t page_size);
+#   define GET_MEM(bytes) (struct hblk *)durango_get_mem(bytes, 0)
 # elif defined(MSWIN32) || defined(CYGWIN32)
     ptr_t GC_win32_get_mem(GC_word bytes);
 #   define GET_MEM(bytes) (struct hblk *)GC_win32_get_mem(bytes)
@@ -2931,10 +3074,31 @@
 # elif defined(SN_TARGET_PS3)
     void *ps3_get_mem(size_t size);
 #   define GET_MEM(bytes) (struct hblk*)ps3_get_mem(bytes)
+# elif defined(SN_TARGET_ORBIS)
+	extern void *ps4_get_mem (size_t size);
+#   define GET_MEM(bytes) (struct hblk*) ps4_get_mem (bytes)
+# elif defined(SN_TARGET_PSP2)
+	extern void *psp2_get_mem (size_t size);
+#   define GET_MEM(bytes) (struct hblk*) psp2_get_mem (bytes)
+# elif defined(_XBOX_ONE)
+	extern void *durango_get_mem (size_t size);
+#   define GET_MEM(bytes) (struct hblk*) durango_get_mem (bytes)
+# elif defined(NN_BUILD_TARGET_PLATFORM_NX)
+	extern void *switch_get_mem (size_t size);
+#   define GET_MEM(bytes) (struct hblk*) switch_get_mem (bytes)
 # else
     ptr_t GC_unix_get_mem(GC_word bytes);
 #   define GET_MEM(bytes) (struct hblk *)GC_unix_get_mem(bytes)
 # endif
+
 #endif /* GC_PRIVATE_H */
+
+#ifndef SMALL_CONFIG
+/* We were running out of memory due to the fact that 
+ * GC has a static sized array for heap segments, and without
+ * LARGE_CONFIG you go OOM at around 1.8 GB on 64-bit.
+ * Note, we define it everywhere on Mono. */
+#define LARGE_CONFIG
+#endif
 
 #endif /* GCCONFIG_H */

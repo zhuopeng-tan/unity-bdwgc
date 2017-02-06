@@ -129,6 +129,28 @@ GC_API GC_on_heap_resize_proc GC_CALL GC_get_on_heap_resize(void);
                         /* Both the supplied setter and the getter      */
                         /* acquire the GC lock (to avoid data races).   */
 
+typedef enum {
+    GC_EVENT_START,
+    GC_EVENT_MARK_START,
+    GC_EVENT_MARK_END,
+    GC_EVENT_RECLAIM_START,
+    GC_EVENT_RECLAIM_END,
+    GC_EVENT_END,
+    GC_EVENT_PRE_STOP_WORLD,
+    GC_EVENT_POST_STOP_WORLD,
+    GC_EVENT_PRE_START_WORLD,
+    GC_EVENT_POST_START_WORLD
+} GCEventType;
+
+typedef void (GC_CALLBACK * GC_on_event_proc)(GCEventType /* event_type */);
+                        /* Invoked when the heap grows or shrinks.      */
+                        /* Called with the world stopped (and the       */
+                        /* allocation lock held).  May be 0.            */
+GC_API void GC_CALL GC_set_on_event(GC_on_event_proc);
+GC_API GC_on_event_proc GC_CALL GC_get_on_event(void);
+                        /* Both the supplied setter and the getter      */
+                        /* acquire the GC lock (to avoid data races).   */
+
 GC_API GC_ATTR_DEPRECATED int GC_find_leak;
                         /* Do not actually garbage collect, but simply  */
                         /* report inaccessible memory that was not      */
@@ -1485,6 +1507,9 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #     include <process.h> /* For _beginthreadex, _endthreadex */
 #   endif
 
+#   ifndef WIN32_LEAN_AND_MEAN
+#   define WIN32_LEAN_AND_MEAN
+#   endif
 #   include <windows.h>
 
 #   ifdef __cplusplus
@@ -1608,13 +1633,22 @@ GC_API int GC_CALL GC_get_force_unmap_on_gcollect(void);
 # define GC_DATASTART ((void *)((ulong)_data))
 # define GC_DATAEND ((void *)((ulong)_end))
 # define GC_INIT_CONF_ROOTS GC_add_roots(GC_DATASTART, GC_DATAEND)
-#elif (defined(PLATFORM_ANDROID) || defined(__ANDROID__)) \
-      && !defined(GC_NOT_DLL)
-  /* Required if GC is built as shared lib with -D IGNORE_DYNAMIC_LOADING. */
-# pragma weak __data_start
-  extern int __data_start[], _end[];
-# define GC_INIT_CONF_ROOTS (void)((GC_word)(__data_start) != 0 ? \
-                                (GC_add_roots(__data_start, _end), 0) : 0)
+/*
+Enabling this section of code will cause the entire binary section of memory
+to be pushed as a root, which is not correct. Boehm does this to be conservative
+and find static data. This is a bad idea though because on some Android devices
+we're seeing some of the binary data become unmapped, so when we go to scan it
+we get a signal like this: signal 11 (SIGSEGV), code 1 (SEGV_MAPERR). There is
+no need for us to push all of this data as a root, we know where the static
+data is already.
+*/
+//#elif (defined(PLATFORM_ANDROID) || defined(__ANDROID__)) \
+//      && !defined(GC_NOT_DLL)
+//  /* Required if GC is built as shared lib with -D IGNORE_DYNAMIC_LOADING. */
+//# pragma weak __data_start
+//  extern int __data_start[], _end[];
+//# define GC_INIT_CONF_ROOTS (void)((GC_word)(__data_start) != 0 ? \
+//                                (GC_add_roots(__data_start, _end), 0) : 0)
 #else
 # define GC_INIT_CONF_ROOTS /* empty */
 #endif
@@ -1755,6 +1789,16 @@ GC_API void GC_CALL GC_win32_free_heap(void);
 # define GC_malloc_atomic_ignore_off_page(a) \
         (*GC_amiga_allocwrapper_do)(a,GC_malloc_atomic_ignore_off_page)
 #endif /* _AMIGA && !GC_AMIGA_MAKINGLIB */
+
+/* Unity specific APIs */
+GC_API void GC_CALL GC_stop_world_external();
+GC_API void GC_CALL GC_start_world_external();
+
+/* APIs for getting access to raw GC heap */
+/* These are NOT thread safe, so should be called with GC lock held */
+typedef void (*GC_heap_section_proc)(void* user_data, GC_PTR start, GC_PTR end);
+GC_API void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback);
+GC_API GC_word GC_get_heap_section_count();
 
 #ifdef __cplusplus
   }  /* end of extern "C" */

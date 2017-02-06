@@ -363,8 +363,18 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 # include <windows.h>
 # include <winbase.h>
 # define CLOCK_TYPE DWORD
-# define GET_TIME(x) (void)(x = GetTickCount())
+# if !defined(MSWINRT)
+#   define GET_TIME(x) (void)(x = GetTickCount())
+# else
+#   define GET_TIME(x) (void)(x = (DWORD)GetTickCount64())
+# endif
 # define MS_TIME_DIFF(a,b) ((long)((a)-(b)))
+#elif defined(NN_PLATFORM_CTR)
+# define CLOCK_TYPE signed long long int
+  CLOCK_TYPE n3ds_get_system_tick(void);
+  CLOCK_TYPE n3ds_convert_tick_to_ms(CLOCK_TYPE tick);
+# define GET_TIME(x) (void)(x = n3ds_get_system_tick())
+# define MS_TIME_DIFF(a,b) ((long)(n3ds_convert_tick_to_ms((a)-(b))))
 #else /* !MSWIN32, !MSWINCE, !BSD_TIME */
 # include <time.h>
 # if defined(FREEBSD) && !defined(CLOCKS_PER_SEC)
@@ -443,7 +453,7 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
                                    PCR_allSigsBlocked, \
                                    PCR_waitForever)
 # else
-#   if defined(GC_WIN32_THREADS) || defined(GC_PTHREADS)
+#   if defined(GC_WIN32_THREADS) || defined(GC_PTHREADS) || defined(NN_PLATFORM_CTR) || defined(NN_BUILD_TARGET_PLATFORM_NX)
       GC_INNER void GC_stop_world(void);
       GC_INNER void GC_start_world(void);
 #     define STOP_WORLD() GC_stop_world()
@@ -480,7 +490,7 @@ typedef char * ptr_t;   /* A generic pointer to which we can add        */
 #   elif defined(MSWINCE) && defined(NO_DEBUGGING)
 #     define ABORT(msg) (GC_on_abort(msg), ExitProcess(-1))
 #   elif defined(MSWIN32) || defined(MSWINCE)
-#     define ABORT(msg) { GC_on_abort(msg); DebugBreak(); }
+#     define ABORT(msg) { GC_on_abort(msg); __debugbreak(); }
                 /* Note that: on a WinCE box, this could be silently    */
                 /* ignored (i.e., the program is not aborted);          */
                 /* DebugBreak is a statement in some toolchains.        */
@@ -590,10 +600,12 @@ GC_EXTERN GC_warn_proc GC_current_warn_proc;
 # else
 #   if defined(ARM32)
 #     define GC_THREAD_STATE_T                  arm_thread_state_t
-#     ifdef ARM_MACHINE_THREAD_STATE_COUNT
-#       define GC_MACH_THREAD_STATE             ARM_MACHINE_THREAD_STATE
-#       define GC_MACH_THREAD_STATE_COUNT       ARM_MACHINE_THREAD_STATE_COUNT
-#     endif
+#     define GC_MACH_THREAD_STATE               ARM_THREAD_STATE
+#     define GC_MACH_THREAD_STATE_COUNT         ARM_THREAD_STATE_COUNT
+#   elif defined(AARCH64)
+#     define GC_THREAD_STATE_T                  arm_thread_state64_t
+#     define GC_MACH_THREAD_STATE               ARM_THREAD_STATE64
+#     define GC_MACH_THREAD_STATE_COUNT         ARM_THREAD_STATE64_COUNT
 #   else
 #     error define GC_THREAD_STATE_T
 #   endif
@@ -706,6 +718,10 @@ GC_EXTERN GC_warn_proc GC_current_warn_proc;
 # if defined(LARGE_CONFIG) || !defined(SMALL_CONFIG)
 #   ifdef ALPHA
 #     define CPP_LOG_HBLKSIZE 13
+#   elif defined(SN_TARGET_PSP2)
+#     define CPP_LOG_HBLKSIZE 16 //page size is set to 64k
+#   elif defined(SN_TARGET_ORBIS)
+#     define CPP_LOG_HBLKSIZE 16 //page size is set to 64k
 #   else
 #     define CPP_LOG_HBLKSIZE 12
 #   endif
@@ -1396,7 +1412,7 @@ GC_EXTERN word GC_n_heap_sects; /* Number of separately added heap      */
 
 GC_EXTERN word GC_page_size;
 
-#if defined(MSWIN32) || defined(MSWINCE) || defined(CYGWIN32)
+#if (defined(MSWIN32) || defined(MSWINCE) || defined(CYGWIN32)) && !defined(_XBOX_ONE)
   struct _SYSTEM_INFO;
   GC_EXTERN struct _SYSTEM_INFO GC_sysinfo;
   GC_INNER GC_bool GC_is_heap_base(ptr_t p);
@@ -2507,5 +2523,8 @@ GC_INNER ptr_t GC_store_debug_info(ptr_t p, word sz, const char *str,
 # define RESTORE_CANCEL(state) (void)0
 # define ASSERT_CANCEL_DISABLED() (void)0
 #endif /* !CANCEL_SAFE */
+
+/* Unity specific APIs */
+GC_INNER void GC_send_event(GCEventType /* event_type */);
 
 #endif /* GC_PRIVATE_H */

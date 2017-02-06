@@ -45,13 +45,13 @@
  */
 
 #if defined(GC_PTHREADS) && !defined(GC_WIN32_THREADS)
-
 # include <stdlib.h>
 # include <pthread.h>
 # include <sched.h>
 # include <time.h>
 # include <errno.h>
 # include <unistd.h>
+# if !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)
 # if !defined(GC_RTEMS_PTHREADS)
 #   include <sys/mman.h>
 # endif
@@ -59,6 +59,7 @@
 # include <sys/types.h>
 # include <sys/stat.h>
 # include <fcntl.h>
+# endif
 # include <signal.h>
 
 # include "gc_inline.h"
@@ -1381,6 +1382,8 @@ GC_INNER_PTHRSTART void GC_thread_exit_proc(void *arg)
     UNLOCK();
 }
 
+#ifndef SN_TARGET_PSP2
+#ifndef SN_TARGET_ORBIS
 GC_API int WRAP_FUNC(pthread_join)(pthread_t thread, void **retval)
 {
     int result;
@@ -1437,6 +1440,8 @@ GC_API int WRAP_FUNC(pthread_detach)(pthread_t thread)
     }
     return result;
 }
+#endif // SN_TARGET_ORBIS
+#endif // SN_TARGET_PSP2
 
 #ifndef GC_NO_PTHREAD_CANCEL
   /* We should deal with the fact that apparently on Solaris and,       */
@@ -1658,6 +1663,8 @@ STATIC void * GC_start_routine(void * arg)
 #   endif
 }
 
+#ifndef SN_TARGET_PSP2
+#ifndef SN_TARGET_ORBIS
 GC_API int WRAP_FUNC(pthread_create)(pthread_t *new_thread,
                      GC_PTHREAD_CREATE_CONST pthread_attr_t *attr,
                      void *(*start_routine)(void *), void *arg)
@@ -1767,6 +1774,8 @@ GC_API int WRAP_FUNC(pthread_create)(pthread_t *new_thread,
 
     return(result);
 }
+#endif // SN_TARGET_ORBIS
+#endif // SN_TARGET_PSP2
 
 #if defined(USE_SPIN_LOCK) || !defined(NO_PTHREAD_TRYLOCK)
 /* Spend a few cycles in a way that can't introduce contention with     */
@@ -1928,6 +1937,28 @@ yield:
             nanosleep(&ts, 0);
         }
     }
+}
+
+#elif defined(SN_TARGET_PSP2)
+
+WapiMutex GC_allocate_ml_PSP2 = { 0, NULL };
+
+void PSP2_GC_Initialiselock()
+{
+	int ret = PSP2_MutexCreate(&GC_allocate_ml_PSP2);
+	GC_ASSERT(ret == 0);
+}
+
+void PSP2_GC_Lock()
+{
+	int ret = PSP2_MutexLock(&GC_allocate_ml_PSP2);
+	GC_ASSERT(ret == 0);
+}
+
+void PSP2_GC_Unlock()
+{
+	int ret = PSP2_MutexUnlock(&GC_allocate_ml_PSP2);
+	GC_ASSERT(ret == 0);
 }
 
 #else  /* !USE_SPIN_LOCK */

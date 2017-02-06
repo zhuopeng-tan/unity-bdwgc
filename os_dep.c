@@ -47,9 +47,9 @@
 #endif /* LINUX && !POWERPC */
 
 #if !defined(OS2) && !defined(PCR) && !defined(AMIGA) && !defined(MACOS) \
-    && !defined(MSWINCE) && !defined(__CC_ARM)
+    && !defined(MSWINCE) && !defined(__CC_ARM) && !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)
 # include <sys/types.h>
-# if !defined(MSWIN32)
+# if !defined(MSWIN32) && !defined(_XBOX_ONE)
 #   include <unistd.h>
 # endif
 #endif
@@ -87,6 +87,11 @@
 # include <windows.h>
   /* It's not clear this is completely kosher under Cygwin.  But it     */
   /* allows us to get a working GC_get_stack_base.                      */
+
+#if defined(MSWINRT)
+#include <assert.h>
+#endif
+
 #endif
 
 #ifdef MACOS
@@ -1573,7 +1578,17 @@ void GC_register_data_segments(void)
         }
 #     endif
 
-      hK32 = GetModuleHandle(TEXT("kernel32.dll"));
+#     ifndef MSWINRT
+        hK32 = GetModuleHandle(TEXT("kernel32.dll"));
+#     else
+        {
+          MEMORY_BASIC_INFORMATION memoryInfo;
+          SIZE_T result = VirtualQuery(GetProcAddress, &memoryInfo, sizeof(memoryInfo));
+          assert(result == sizeof(memoryInfo) && "VirtualQuery failed");
+
+          hK32 = (HMODULE)memoryInfo.AllocationBase;
+        }
+#     endif
       if (hK32 != (HMODULE)0 &&
           (GetWriteWatch_func = (GetWriteWatch_type)GetProcAddress(hK32,
                                                 "GetWriteWatch")) != NULL) {
@@ -1640,18 +1655,27 @@ void GC_register_data_segments(void)
 
   GC_INNER void GC_init_win32(void)
   {
-    /* Set GC_wnt.  If we're running under win32s, assume that no DLLs  */
-    /* will be loaded.  I doubt anyone still runs win32s, but...        */
-    DWORD v = GetVersion();
-    GC_wnt = !(v & 0x80000000);
-    GC_no_win32_dlls |= ((!GC_wnt) && (v & 0xff) <= 3);
-#   ifdef USE_MUNMAP
-      if (GC_no_win32_dlls) {
-        /* Turn off unmapping for safety (since may not work well with  */
-        /* GlobalAlloc).                                                */
-        GC_unmap_threshold = 0;
-      }
-#   endif
+#   if !defined(MSWINRT) && !defined(_XBOX_ONE)
+      /* Set GC_wnt.  If we're running under win32s, assume that no DLLs  */
+      /* will be loaded.  I doubt anyone still runs win32s, but...        */
+	  /* GetVersion is deprecated as of Windows 8.1 */
+#pragma warning( push )
+#pragma warning( disable : 4996 )
+      DWORD v = GetVersion();
+#pragma warning( pop )
+      GC_wnt = !(v & 0x80000000);
+      GC_no_win32_dlls |= ((!GC_wnt) && (v & 0xff) <= 3);
+#     ifdef USE_MUNMAP
+        if (GC_no_win32_dlls) {
+          /* Turn off unmapping for safety (since may not work well with  */
+          /* GlobalAlloc).                                                */
+          GC_unmap_threshold = 0;
+        }
+#     endif
+#    else
+	  GC_no_win32_dlls = FALSE;
+	  GC_wnt = TRUE;
+#    endif
   }
 
   /* Return the smallest address a such that VirtualQuery               */
@@ -1986,8 +2010,8 @@ void GC_register_data_segments(void)
 
 # if !defined(OS2) && !defined(PCR) && !defined(AMIGA) \
      && !defined(USE_WINALLOC) && !defined(MACOS) && !defined(DOS4GW) \
-     && !defined(NONSTOP) && !defined(SN_TARGET_PS3) && !defined(RTEMS) \
-     && !defined(__CC_ARM)
+     && !defined(NONSTOP) && !defined(SN_TARGET_PS3) && !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2) && !defined(RTEMS) \
+     && !defined(__CC_ARM) && !defined(NN_BUILD_TARGET_PLATFORM_NX)
 
 # define SBRK_ARG_T ptrdiff_t
 
@@ -2021,6 +2045,7 @@ void GC_register_data_segments(void)
   extern char* GC_get_private_path_and_zero_file(void);
 #endif
 
+#if !defined(_XBOX_ONE)
 STATIC ptr_t GC_unix_mmap_get_mem(word bytes)
 {
     void *result;
@@ -2072,6 +2097,7 @@ STATIC ptr_t GC_unix_mmap_get_mem(word bytes)
     return((ptr_t)result);
 }
 
+# endif 
 # endif  /* MMAP_SUPPORTED */
 
 #if defined(USE_MMAP)
@@ -2167,6 +2193,21 @@ void * os2_alloc(size_t bytes)
 
 # endif /* OS2 */
 
+#if defined(_XBOX_ONE) 
+void* durango_get_mem (size_t size, size_t page_size)
+{
+	if (size)
+	{
+		void* p = VirtualAlloc(NULL, size, MEM_COMMIT | MEM_TOP_DOWN, PAGE_READWRITE);
+		return p;				
+	}
+	else
+	{
+		return 0;
+	}
+}
+#endif
+
 #ifdef MSWINCE
   ptr_t GC_wince_get_mem(word bytes)
   {
@@ -2222,7 +2263,7 @@ void * os2_alloc(size_t bytes)
     return(result);
   }
 
-#elif defined(USE_WINALLOC) || defined(CYGWIN32)
+#elif (defined(USE_WINALLOC) && !defined(_XBOX_ONE)) || defined(CYGWIN32)
 
 # ifdef USE_GLOBAL_ALLOC
 #   define GLOBAL_ALLOC_TEST 1
@@ -2243,10 +2284,10 @@ void * os2_alloc(size_t bytes)
   {
     ptr_t result;
 
-# ifndef USE_WINALLOC
+# if !defined(USE_WINALLOC)
     result = GC_unix_get_mem(bytes);
 # else
-#   ifdef MSWIN32
+#   if defined(MSWIN32) && !defined(MSWINRT)
       if (GLOBAL_ALLOC_TEST) {
         /* VirtualAlloc doesn't like PAGE_EXECUTE_READWRITE.    */
         /* There are also unconfirmed rumors of other           */
@@ -2300,28 +2341,37 @@ void * os2_alloc(size_t bytes)
 
   GC_API void GC_CALL GC_win32_free_heap(void)
   {
-#   ifndef CYGWIN32
-      if (GLOBAL_ALLOC_TEST)
-#   endif
-    {
-      while (GC_n_heap_bases-- > 0) {
-#       ifdef CYGWIN32
-          /* FIXME: Is it OK to use non-GC free() here? */
-#       else
-          GlobalFree(GC_heap_bases[GC_n_heap_bases]);
-#       endif
-        GC_heap_bases[GC_n_heap_bases] = 0;
-      }
-    } /* else */
-#   ifndef CYGWIN32
-      else {
-        /* Avoiding VirtualAlloc leak. */
-        while (GC_n_heap_bases > 0) {
-          VirtualFree(GC_heap_bases[--GC_n_heap_bases], 0, MEM_RELEASE);
+#   ifndef MSWINRT
+#     ifndef CYGWIN32
+        if (GLOBAL_ALLOC_TEST)
+#     endif
+      {
+        while (GC_n_heap_bases-- > 0) {
+#         ifdef CYGWIN32
+            /* FIXME: Is it OK to use non-GC free() here? */
+#         else
+            GlobalFree(GC_heap_bases[GC_n_heap_bases]);
+#         endif
           GC_heap_bases[GC_n_heap_bases] = 0;
         }
-      }
-#   endif
+      } /* else */
+#     ifndef CYGWIN32
+        else
+	    {
+          /* Avoiding VirtualAlloc leak. */
+          while (GC_n_heap_bases > 0) {
+            VirtualFree(GC_heap_bases[--GC_n_heap_bases], 0, MEM_RELEASE);
+            GC_heap_bases[GC_n_heap_bases] = 0;
+          }
+        }
+#     endif
+#   else
+	  /* Avoiding VirtualAlloc leak. */
+	  while (GC_n_heap_bases > 0) {
+		  VirtualFree(GC_heap_bases[--GC_n_heap_bases], 0, MEM_RELEASE);
+		  GC_heap_bases[GC_n_heap_bases] = 0;
+	  }
+#   endif /* MSWINRT */
   }
 #endif /* USE_WINALLOC || CYGWIN32 */
 
@@ -2337,9 +2387,13 @@ void * os2_alloc(size_t bytes)
 /* systems.  If you have something else, don't define           */
 /* USE_MUNMAP.                                                  */
 
-#if !defined(MSWIN32) && !defined(MSWINCE)
+#if !defined(MSWIN32) && !defined(MSWINCE) && !defined(_XBOX_ONE) && !defined(NN_PLATFORM_CTR)
 # include <unistd.h>
-# include <sys/mman.h>
+#ifdef SN_TARGET_PS3
+#	include <sys/memory.h>
+#else
+#include <sys/mman.h>
+#endif
 # include <sys/stat.h>
 # include <sys/types.h>
 #endif
@@ -2381,7 +2435,7 @@ GC_INNER void GC_unmap(ptr_t start, size_t bytes)
     word len = end_addr - start_addr;
 
     if (0 == start_addr) return;
-#   ifdef USE_WINALLOC
+#   if defined(USE_WINALLOC)
       while (len != 0) {
           MEMORY_BASIC_INFORMATION mem_info;
           GC_word free_len;
@@ -2396,6 +2450,9 @@ GC_INNER void GC_unmap(ptr_t start, size_t bytes)
           start_addr += free_len;
           len -= free_len;
       }
+#	elif defined(SN_TARGET_PS3)
+
+	ps3_free_mem(start_addr, len);
 #   else
       /* We immediately remap it to prevent an intervening mmap from    */
       /* accidentally grabbing the same address space.                  */
@@ -2420,7 +2477,7 @@ GC_INNER void GC_remap(ptr_t start, size_t bytes)
     if (0 == start_addr) return;
 
     /* FIXME: Handle out-of-memory correctly (at least for Win32)       */
-#   ifdef USE_WINALLOC
+#   if defined (USE_WINALLOC)
       while (len != 0) {
           MEMORY_BASIC_INFORMATION mem_info;
           GC_word alloc_len;
@@ -2489,7 +2546,7 @@ GC_INNER void GC_unmap_gap(ptr_t start1, size_t bytes1, ptr_t start2,
     if (0 == start2_addr) end_addr = GC_unmap_end(start1, bytes1 + bytes2);
     if (0 == start_addr) return;
     len = end_addr - start_addr;
-#   ifdef USE_WINALLOC
+#   if defined(USE_WINALLOC)
       while (len != 0) {
           MEMORY_BASIC_INFORMATION mem_info;
           GC_word free_len;
@@ -2569,7 +2626,7 @@ STATIC void GC_CALLBACK GC_default_push_other_roots(void)
 
 # endif /* PCR */
 
-# if defined(GC_PTHREADS) || defined(GC_WIN32_THREADS)
+# if defined(GC_PTHREADS) || defined(GC_WIN32_THREADS) || defined(NN_PLATFORM_CTR) || defined(NN_BUILD_TARGET_PLATFORM_NX)
     STATIC void GC_CALLBACK GC_default_push_other_roots(void)
     {
       GC_push_all_stacks();

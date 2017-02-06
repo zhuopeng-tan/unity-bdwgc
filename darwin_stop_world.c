@@ -61,6 +61,20 @@ GC_INNER ptr_t GC_FindTopOfStack(unsigned long stack_start)
         __asm__ __volatile__ ("ld %0,0(r1)" : "=r" (frame));
 #     endif
     } else
+# elif defined(ARM32)
+    if (stack_start == 0)
+    {
+        volatile ptr_t sp_reg;
+        __asm__ __volatile__("mov %0, r7\n" : "=r"(sp_reg));
+        frame = (StackFrame*)sp_reg;
+    } else
+# elif defined(AARCH64)
+    if (stack_start == 0)
+    {
+        volatile ptr_t sp_reg;
+        __asm__ __volatile__("mov %0, x29\n" : "=r"(sp_reg));
+        frame = (StackFrame*)sp_reg;
+    } else
 # else
     GC_ASSERT(stack_start != 0); /* not implemented */
 # endif /* !POWERPC */
@@ -228,7 +242,7 @@ STATIC ptr_t GC_stack_range_for(ptr_t *phi, thread_act_t thread, GC_thread p,
 #   elif defined(ARM32)
       lo = (void *)state.__sp;
 #     ifndef DARWIN_DONT_PARSE_STACK
-        *phi = GC_FindTopOfStack(state.__sp);
+        *phi = GC_FindTopOfStack(state.__r[7]);
 #     endif
       GC_push_one(state.__r[0]);
       GC_push_one(state.__r[1]);
@@ -246,6 +260,21 @@ STATIC ptr_t GC_stack_range_for(ptr_t *phi, thread_act_t thread, GC_thread p,
       /* GC_push_one(state.__sp); */
       GC_push_one(state.__lr);
       /* GC_push_one(state.__pc); */
+      GC_push_one(state.__cpsr);
+
+#   elif defined(AARCH64)
+      lo = (void *)state.__sp;
+#     ifndef DARWIN_DONT_PARSE_STACK
+        *phi = GC_FindTopOfStack(state.__fp);
+#     endif
+      
+      for (int ii = 0; ii < 29; ++ii)
+        GC_push_one(state.__x[ii]);
+
+      //GC_push_one(state.__fp);
+      GC_push_one(state.__lr);
+      //GC_push_one(state.__sp);
+      //GC_push_one(state.__pc);
       GC_push_one(state.__cpsr);
 
 #   else

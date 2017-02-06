@@ -18,6 +18,7 @@
 #ifndef GC_PTHREAD_STOP_WORLD_H
 #define GC_PTHREAD_STOP_WORLD_H
 
+
 struct thread_stop_info {
 #   ifndef GC_OPENBSD_UTHREADS
       word last_stop_count;     /* GC_last_stop_count value when thread */
@@ -37,6 +38,11 @@ struct thread_stop_info {
 #     define NACL_GC_REG_STORAGE_SIZE 20
       ptr_t reg_storage[NACL_GC_REG_STORAGE_SIZE];
 #   endif
+
+#if defined(SN_TARGET_ORBIS) 
+#		define ORBIS_GC_REG_STORAGE_SIZE 27
+	  __uint64_t registers[ORBIS_GC_REG_STORAGE_SIZE];
+#endif
 };
 
 GC_INNER void GC_stop_init(void);

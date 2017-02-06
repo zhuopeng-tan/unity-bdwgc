@@ -26,7 +26,7 @@
  * But then not much of anything is safe in the presence of dlclose.
  */
 
-#if !defined(MACOS) && !defined(_WIN32_WCE) && !defined(__CC_ARM)
+#if !defined(MACOS) && !defined(_WIN32_WCE) && !defined(__CC_ARM) && !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)
 # include <sys/types.h>
 #endif
 

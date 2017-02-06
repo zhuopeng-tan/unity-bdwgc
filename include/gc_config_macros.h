@@ -57,6 +57,12 @@
 # define GC_USE_LD_WRAP
 #endif
 
+#if defined(CAFE) || defined(SN_TARGET_ORBIS) /* define GC_THREADS here and not necessarily on cmdline as the latter can be forgotten */
+#if !defined(GC_THREADS)
+# define GC_THREADS
+#endif
+#endif
+
 #if defined(GC_WIN32_PTHREADS) && !defined(GC_WIN32_THREADS)
   /* Using pthreads-w32 library. */
 # define GC_WIN32_THREADS
@@ -100,7 +106,9 @@
     /* FIXME: Should we really need for FreeBSD and NetBSD to check     */
     /* that no other GC_xxx_THREADS macro is set?                       */
 #   if defined(__FreeBSD__) || defined(__DragonFly__)
+#   if !defined(SN_TARGET_ORBIS)
 #     define GC_FREEBSD_THREADS
+#   endif
 #   elif defined(__NetBSD__)
 #     define GC_NETBSD_THREADS
 #   endif
@@ -125,7 +133,8 @@
 
 #undef GC_PTHREADS
 #if (!defined(GC_WIN32_THREADS) || defined(GC_WIN32_PTHREADS) \
-     || defined(__CYGWIN32__) || defined(__CYGWIN__)) && defined(GC_THREADS)
+     || defined(__CYGWIN32__) || defined(__CYGWIN__) || defined(SN_TARGET_ORBIS) || defined(SN_TARGET_PSP2)) \
+     && defined(GC_THREADS) && !defined(NN_PLATFORM_CTR) && !defined(NN_BUILD_TARGET_PLATFORM_NX)
   /* Posix threads. */
 # define GC_PTHREADS
 #endif
@@ -242,7 +251,7 @@
 #ifndef GC_ATTR_ALLOC_SIZE
   /* 'alloc_size' attribute improves __builtin_object_size correctness. */
   /* Only single-argument form of 'alloc_size' attribute is used.       */
-# if defined(__GNUC__) && (__GNUC__ > 4 \
+# if !defined(__APPLE__) && defined(__GNUC__) && (__GNUC__ > 4 \
         || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3 && !defined(__ICC)) \
         || __clang_major__ > 3 \
         || (__clang_major__ == 3 && __clang_minor__ >= 2))

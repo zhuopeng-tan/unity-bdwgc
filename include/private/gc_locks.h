@@ -28,7 +28,7 @@
  */
 # ifdef THREADS
 
-#  if defined(GC_PTHREADS) && !defined(GC_WIN32_THREADS)
+#  if defined(GC_PTHREADS) && !defined(GC_WIN32_THREADS) && !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)
 #    include "atomic_ops.h"
 #  endif
 
@@ -43,7 +43,7 @@
 #  endif
 
 #  if (!defined(AO_HAVE_test_and_set_acquire) || defined(GC_RTEMS_PTHREADS) \
-       || defined(SN_TARGET_PS3) || defined(GC_WIN32_THREADS) \
+       || defined(SN_TARGET_PS3) || defined(SN_TARGET_ORBIS) || defined(SN_TARGET_PSP2) || defined(GC_WIN32_THREADS) \
        || defined(LINT2)) && defined(GC_PTHREADS)
 #    define USE_PTHREAD_LOCKS
 #  endif
@@ -137,8 +137,13 @@
 #      endif
 #    endif /* THREAD_LOCAL_ALLOC || USE_PTHREAD_LOCKS */
 #    ifdef USE_PTHREAD_LOCKS
+#		ifdef SN_TARGET_PSP2
+#			include "psp2-support.h"
+			extern WapiMutex GC_allocate_ml_PSP2;
+#		else
 #      include <pthread.h>
        GC_EXTERN pthread_mutex_t GC_allocate_ml;
+#		endif
 #      ifdef GC_ASSERTIONS
 #        define UNCOND_LOCK() { GC_ASSERT(I_DONT_HOLD_LOCK()); \
                                 GC_lock(); SET_LOCK_HOLDER(); }
@@ -153,11 +158,22 @@
 #            define UNCOND_LOCK() pthread_mutex_lock(&GC_allocate_ml)
 #          endif
 #        else
+#		   if defined (SN_TARGET_PSP2)
+			   extern void PSP2_GC_Lock();
+#              define UNCOND_LOCK() \
+				  PSP2_GC_Lock()
+#		   else
 #          define UNCOND_LOCK() \
               { if (0 != pthread_mutex_trylock(&GC_allocate_ml)) \
                   GC_lock(); }
 #        endif
+#        endif
+#        if defined(SN_TARGET_PSP2)
+	        extern void PSP2_GC_Unlock();
+#           define UNCOND_UNLOCK() PSP2_GC_Unlock();
+#        else
 #        define UNCOND_UNLOCK() pthread_mutex_unlock(&GC_allocate_ml)
+#		 endif
 #      endif /* !GC_ASSERTIONS */
 #    endif /* USE_PTHREAD_LOCKS */
 #    ifdef GC_ASSERTIONS
@@ -180,6 +196,28 @@
 #    define ENTER_GC() GC_collecting = 1;
 #    define EXIT_GC() GC_collecting = 0;
      GC_INNER void GC_lock(void);
+
+# elif defined(THREADS)
+#    ifdef GC_ASSERTIONS
+       extern void GC_set_lock_holder(void);
+       extern void GC_unset_lock_holder(void);
+       extern GC_bool GC_i_hold_lock(void);
+       extern GC_bool GC_i_dont_hold_lock(void);
+       extern void GC_lock_assert(void);
+       extern void GC_unlock_assert(void);
+#      define SET_LOCK_HOLDER() GC_set_lock_holder()
+#      define UNSET_LOCK_HOLDER() GC_unset_lock_holder()
+#      define I_HOLD_LOCK() GC_i_hold_lock()
+#      define I_DONT_HOLD_LOCK() GC_i_dont_hold_lock()
+#      define UNCOND_LOCK() GC_lock_assert()
+#      define UNCOND_UNLOCK() GC_unlock_assert()
+#    else
+       extern void GC_lock(void);
+       extern void GC_unlock(void);
+#      define UNCOND_LOCK() GC_lock()
+#      define UNCOND_UNLOCK() GC_unlock()
+#    endif /* !GC_ASSERTIONS */
+
 #  endif /* GC_PTHREADS with linux_threads.c implementation */
    GC_EXTERN GC_bool GC_need_to_lock;
 

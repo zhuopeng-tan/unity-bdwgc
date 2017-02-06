@@ -727,8 +727,8 @@ STATIC void GC_push_gc_structures(void)
 
 GC_INNER void GC_cond_register_dynamic_libraries(void)
 {
-# if defined(DYNAMIC_LOADING) || defined(MSWIN32) || defined(MSWINCE) \
-     || defined(CYGWIN32) || defined(PCR)
+# if !defined(_XBOX_ONE) && (defined(DYNAMIC_LOADING) || defined(MSWIN32) || defined(MSWINCE) \
+     || defined(CYGWIN32) || defined(PCR))
     GC_remove_tmp_roots();
     if (!GC_no_dls) GC_register_dynamic_libraries();
 # else
@@ -810,7 +810,9 @@ GC_INNER void GC_push_roots(GC_bool all, ptr_t cold_gc_frame)
      * This is usually done by saving the current context on the
      * stack, and then just tracing from the stack.
      */
+#ifndef __EMSCRIPTEN__
       GC_push_regs_and_stack(cold_gc_frame);
+#endif
 
     if (GC_push_other_roots != 0) (*GC_push_other_roots)();
         /* In the threads case, this also pushes thread stacks. */

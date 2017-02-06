@@ -1188,6 +1188,9 @@ STATIC void GC_suspend(GC_thread t)
                 /* TRUE only if GC_stop_world() acquired GC_write_cs.   */
 #endif
 
+/* Defined in misc.c */
+extern CRITICAL_SECTION GC_write_cs;
+
 GC_INNER void GC_stop_world(void)
 {
   DWORD thread_id = GetCurrentThreadId();
@@ -1369,7 +1372,8 @@ STATIC word GC_push_stack_for(GC_thread thread, DWORD me)
     /* For unblocked threads call GetThreadContext().   */
     CONTEXT context;
     context.ContextFlags = CONTEXT_INTEGER|CONTEXT_CONTROL;
-    if (!GetThreadContext(THREAD_HANDLE(thread), &context))
+
+	if (!GetThreadContext(THREAD_HANDLE(thread), &context))
       ABORT("GetThreadContext failed");
 
     /* Push all registers that might point into the heap.  Frame        */
@@ -1405,7 +1409,7 @@ STATIC word GC_push_stack_for(GC_thread thread, DWORD me)
       PUSH4(Gpr19,Gpr20,Gpr21,Gpr22), PUSH4(Gpr23,Gpr24,Gpr25,Gpr26);
       PUSH4(Gpr27,Gpr28,Gpr29,Gpr30), PUSH1(Gpr31);
       sp = (ptr_t)context.Gpr1;
-#   elif defined(ALPHA)
+#	elif defined(ALPHA)
       PUSH4(IntV0,IntT0,IntT1,IntT2), PUSH4(IntT3,IntT4,IntT5,IntT6);
       PUSH4(IntT7,IntS0,IntS1,IntS2), PUSH4(IntS3,IntS4,IntS5,IntFp);
       PUSH4(IntA0,IntA1,IntA2,IntA3), PUSH4(IntA4,IntA5,IntT8,IntT9);
@@ -1890,7 +1894,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
     static void start_mark_threads(void)
     {
       int i;
-#     ifdef MSWINCE
+#     if defined(MSWINCE) || defined(_XBOX_ONE)
         HANDLE handle;
         DWORD thread_id;
 #     else
@@ -1912,7 +1916,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
 
       for (i = 0; i < GC_markers_m1; ++i) {
         marker_last_stack_min[i] = ADDR_LIMIT;
-#       ifdef MSWINCE
+#       if defined(MSWINCE) || defined(_XBOX_ONE)
           /* There is no _beginthreadex() in WinCE. */
           handle = CreateThread(NULL /* lpsa */,
                                 MARK_THREAD_STACK_SIZE /* ignored */,
@@ -2191,7 +2195,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
   STATIC void * GC_CALLBACK GC_win32_start_inner(struct GC_stack_base *sb,
                                                  void *arg)
   {
-    void * ret;
+    void * ret = NULL;
     LPTHREAD_START_ROUTINE start = ((thread_args *)arg)->start;
     LPVOID param = ((thread_args *)arg)->param;
 
@@ -2279,7 +2283,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
     ExitThread(dwExitCode);
   }
 
-# if !defined(MSWINCE) && !defined(CYGWIN32)
+# if !defined(MSWINCE) && !defined(CYGWIN32) && !defined(_XBOX_ONE)
 
     GC_API GC_uintptr_t GC_CALL GC_beginthreadex(
                                   void *security, unsigned stack_size,

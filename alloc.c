@@ -20,7 +20,7 @@
 #include <stdio.h>
 #if !defined(MACOS) && !defined(MSWINCE)
 # include <signal.h>
-# if !defined(__CC_ARM)
+# if !defined(__CC_ARM) && !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)
 #   include <sys/types.h>
 # endif
 #endif
@@ -199,11 +199,15 @@ GC_API GC_stop_func GC_CALL GC_get_stop_func(void)
 static word min_bytes_allocd(void)
 {
     word result;
-#   ifdef STACK_GROWS_UP
+#   ifdef __EMSCRIPTEN__
+      word stack_size = 0;
+#   else
+#     ifdef STACK_GROWS_UP
       word stack_size = GC_approx_sp() - GC_stackbottom;
             /* GC_stackbottom is used only for a single-threaded case.  */
-#   else
+#     else
       word stack_size = GC_stackbottom - GC_approx_sp();
+#     endif
 #   endif
 
     word total_root_size;       /* includes double stack size,  */
@@ -426,6 +430,7 @@ GC_INNER GC_bool GC_try_to_collect_inner(GC_stop_func stop_func)
         }
     }
     GC_notify_full_gc();
+    GC_send_event(GC_EVENT_START);
 #   ifndef SMALL_CONFIG
       if (GC_print_stats) {
         GET_TIME(start_time);
@@ -465,6 +470,7 @@ GC_INNER GC_bool GC_try_to_collect_inner(GC_stop_func stop_func)
       return(FALSE);
     }
     GC_finish_collection();
+    GC_send_event(GC_EVENT_END);
 #   ifndef SMALL_CONFIG
       if (GC_print_stats) {
         GET_TIME(current_time);
@@ -603,10 +609,15 @@ STATIC GC_bool GC_stopped_mark(GC_stop_func stop_func)
         GET_TIME(start_time);
 #   endif
 
+    GC_send_event (GC_EVENT_PRE_STOP_WORLD);
     STOP_WORLD();
+    GC_send_event (GC_EVENT_POST_STOP_WORLD);
 #   ifdef THREAD_LOCAL_ALLOC
       GC_world_stopped = TRUE;
 #   endif
+
+    GC_send_event(GC_EVENT_MARK_START);
+
         /* Output blank line for convenience here */
     GC_COND_LOG_PRINTF(
               "\n--> Marking for collection #%lu after %lu allocated bytes\n",
@@ -649,10 +660,15 @@ STATIC GC_bool GC_stopped_mark(GC_stop_func stop_func)
       (*GC_check_heap)();
     }
 
+    GC_send_event(GC_EVENT_MARK_END);
+
 #   ifdef THREAD_LOCAL_ALLOC
       GC_world_stopped = FALSE;
 #   endif
+    GC_send_event (GC_EVENT_PRE_START_WORLD);
     START_WORLD();
+    GC_send_event (GC_EVENT_POST_START_WORLD);
+
 #   ifndef SMALL_CONFIG
       if (GC_PRINT_STATS_FLAG) {
         unsigned long time_diff;
@@ -842,6 +858,8 @@ STATIC void GC_finish_collection(void)
         GET_TIME(start_time);
 #   endif
 
+    GC_send_event(GC_EVENT_RECLAIM_START);
+
 #   ifndef GC_GET_HEAP_USAGE_NOT_NEEDED
       if (GC_bytes_found > 0)
         GC_reclaimed_bytes_before_gc += (word)GC_bytes_found;
@@ -946,6 +964,7 @@ STATIC void GC_finish_collection(void)
 
     IF_USE_MUNMAP(GC_unmap_old());
 
+    GC_send_event(GC_EVENT_RECLAIM_END);
 #   ifndef SMALL_CONFIG
       if (GC_print_stats) {
         GET_TIME(done_time);

@@ -14,6 +14,7 @@
  */
 
 #include "private/gc_pmark.h"
+#include "private/gc_priv.h"
 
 #include <stdio.h>
 #include <limits.h>
@@ -34,6 +35,11 @@
 # endif
 # define NOSERVICE
 # include <windows.h>
+#ifdef MSWINRT
+# include <windows.storage.h>
+  // This API is defined in roapi.h, but we cannot include it here since it does not compile in C -_-
+  DECLSPEC_IMPORT HRESULT WINAPI RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void** factory);
+#endif
 #endif
 
 #if defined(UNIX_LIKE) || defined(CYGWIN32) || defined(SYMBIAN)
@@ -50,7 +56,7 @@
 # ifdef PCR
 #   include "il/PCR_IL.h"
     GC_INNER PCR_Th_ML GC_allocate_ml;
-# elif defined(SN_TARGET_PS3)
+# elif defined(SN_TARGET_PS3) || defined(SN_TARGET_ORBIS) || defined(SN_TARGET_PSP2)
 #   include <pthread.h>
     GC_INNER pthread_mutex_t GC_allocate_ml;
 # endif
@@ -345,6 +351,9 @@ GC_INNER void GC_extend_size_map(size_t i)
 /* another frame.                                                       */
 GC_API void * GC_CALL GC_clear_stack(void *arg)
 {
+#ifdef __EMSCRIPTEN__
+    return arg;
+#endif
     ptr_t sp = GC_approx_sp();  /* Hotter than actual sp */
 #   ifdef THREADS
         word volatile dummy[SMALL_CLEAR_SIZE];
@@ -736,7 +745,7 @@ GC_API void GC_CALL GC_get_heap_usage_safe(GC_word *pheap_size,
 
 GC_INNER GC_bool GC_is_initialized = FALSE;
 
-#if (defined(MSWIN32) || defined(MSWINCE)) && defined(THREADS)
+#if (defined(MSWIN32) || defined(MSWINCE) || defined(_XBOX_ONE)) && defined(THREADS)
     GC_INNER CRITICAL_SECTION GC_write_cs;
 #endif
 
@@ -778,7 +787,7 @@ GC_INNER GC_bool GC_is_initialized = FALSE;
 #define GC_DEFAULT_STDERR_FD 2
 
 #if !defined(OS2) && !defined(MACOS) && !defined(GC_ANDROID_LOG) \
-    && !defined(MSWIN32) && !defined(MSWINCE)
+    && !defined(MSWIN32) && !defined(MSWINCE) && !defined(NN_PLATFORM_CTR) && !defined(NN_BUILD_TARGET_PLATFORM_NX)
   STATIC int GC_stdout = GC_DEFAULT_STDOUT_FD;
   STATIC int GC_stderr = GC_DEFAULT_STDERR_FD;
   STATIC int GC_log = GC_DEFAULT_STDERR_FD;
@@ -862,17 +871,23 @@ GC_API void GC_CALL GC_init(void)
 #   if defined(GC_WIN32_THREADS) && !defined(GC_PTHREADS)
      {
 #     ifndef MSWINCE
-        BOOL (WINAPI *pfn) (LPCRITICAL_SECTION, DWORD) = NULL;
-        HMODULE hK32 = GetModuleHandle(TEXT("kernel32.dll"));
-        if (hK32)
-          pfn = (BOOL (WINAPI *) (LPCRITICAL_SECTION, DWORD))
-                GetProcAddress (hK32,
-                                "InitializeCriticalSectionAndSpinCount");
-        if (pfn)
+#       ifndef MSWINRT
+          BOOL (WINAPI *pfn) (LPCRITICAL_SECTION, DWORD) = NULL;
+          HMODULE hK32 = GetModuleHandle(TEXT("kernel32.dll"));
+          if (hK32)
+            pfn = (BOOL (WINAPI *) (LPCRITICAL_SECTION, DWORD))
+                  GetProcAddress (hK32,
+                                  "InitializeCriticalSectionAndSpinCount");
+          if (pfn)
             pfn(&GC_allocate_ml, 4000);
-        else
+          else
+#       else
+		  InitializeCriticalSectionAndSpinCount(&GC_allocate_ml, 4000);
+#       endif
 #     endif /* !MSWINCE */
+#     ifndef MSWINRT
         /* else */ InitializeCriticalSection (&GC_allocate_ml);
+#     endif
      }
 #   endif /* GC_WIN32_THREADS */
 #   if (defined(MSWIN32) || defined(MSWINCE)) && defined(THREADS)
@@ -1096,7 +1111,7 @@ GC_API void GC_CALL GC_init(void)
         GC_init_netbsd_elf();
 #   endif
 #   if !defined(THREADS) || defined(GC_PTHREADS) \
-        || defined(GC_WIN32_THREADS) || defined(GC_SOLARIS_THREADS)
+        || defined(GC_WIN32_THREADS) || defined(GC_SOLARIS_THREADS) || defined(NN_PLATFORM_CTR) || defined(NN_BUILD_TARGET_PLATFORM_NX)
       if (GC_stackbottom == 0) {
         GC_stackbottom = GC_get_main_stack_base();
 #       if (defined(LINUX) || defined(HPUX)) && defined(IA64)
@@ -1298,6 +1313,86 @@ GC_API void GC_CALL GC_enable_incremental(void)
 #   define IF_NEED_TO_LOCK(x)
 # endif /* !THREADS */
 
+#ifdef MSWINRT
+  BOOL GetWinRTLogPath(wchar_t* buffer, size_t bufferLength)
+  {
+    GUID kIID_IApplicationDataStatics = { 0x5612147B, 0xE843, 0x45E3, 0x94, 0xD8, 0x06, 0x16, 0x9E, 0x3C, 0x8E, 0x17 };
+    GUID kIID_IStorageItem = { 0x4207A996, 0xCA2F, 0x42F7, 0xBD, 0xE8, 0x8B, 0x10, 0x45, 0x7A, 0x7F, 0x30 };
+    __x_ABI_CWindows_CStorage_CIApplicationDataStatics* appDataStatics = NULL;
+    BOOL result = FALSE;    
+    HSTRING_HEADER appDataClassNameHeader;
+    HSTRING appDataClassName;
+    HRESULT hr;
+
+    if (bufferLength < 1)
+      return FALSE;
+
+    hr = WindowsCreateStringReference(
+      RuntimeClass_Windows_Storage_ApplicationData,
+      (sizeof(RuntimeClass_Windows_Storage_ApplicationData) - 1) / sizeof(wchar_t),
+      &appDataClassNameHeader,
+      &appDataClassName
+    );
+
+    if (FAILED(hr))
+      return FALSE;
+
+    hr = RoGetActivationFactory(appDataClassName, &kIID_IApplicationDataStatics, &appDataStatics);
+
+    if (SUCCEEDED(hr))
+    {
+      __x_ABI_CWindows_CStorage_CIApplicationData* appData = NULL;
+      hr = appDataStatics->lpVtbl->get_Current(appDataStatics, &appData);
+
+      if (SUCCEEDED(hr))
+      {
+        __x_ABI_CWindows_CStorage_CIStorageFolder* tempFolder = NULL;
+        hr = appData->lpVtbl->get_TemporaryFolder(appData, &tempFolder);
+
+        if (SUCCEEDED(hr))
+        {
+          __x_ABI_CWindows_CStorage_CIStorageItem* tempFolderItem = NULL;
+          hr = tempFolder->lpVtbl->QueryInterface(tempFolder, &kIID_IStorageItem, &tempFolderItem);
+
+          if (SUCCEEDED(hr))
+          {
+            HSTRING tempPath = NULL;
+            hr = tempFolderItem->lpVtbl->get_Path(tempFolderItem, &tempPath);
+
+            if (SUCCEEDED(hr))
+            {
+              UINT32 tempPathLength;
+              const wchar_t* tempPathBuffer = WindowsGetStringRawBuffer(tempPath, &tempPathLength);
+
+              buffer[0] = '\0';
+              if (wcsncat_s(buffer, bufferLength, tempPathBuffer, tempPathLength) == 0)
+              {
+                if (wcscat_s(buffer, bufferLength, L"\\") == 0)
+                {
+                  if (wcscat_s(buffer, bufferLength, TEXT(GC_LOG_STD_NAME)) == 0)
+                    result = TRUE;
+                }
+              }
+
+              WindowsDeleteString(tempPath);
+            }
+
+            tempFolderItem->lpVtbl->Release(tempFolderItem);
+          }
+
+          tempFolder->lpVtbl->Release(tempFolder);
+        }
+
+        appData->lpVtbl->Release(appData);
+      }
+
+      appDataStatics->lpVtbl->Release(appDataStatics);
+    }
+
+    return result;
+  }
+#endif
+
   STATIC HANDLE GC_CreateLogFile(void)
   {
     HANDLE hFile;
@@ -1309,6 +1404,7 @@ GC_API void GC_CALL GC_enable_incremental(void)
       logPath = pathBuf;
 #   endif
 
+#   ifndef MSWINRT
     /* Use GetEnvironmentVariable instead of GETENV() for unicode support. */
 #   ifndef NO_GETENV_WIN32
       if (GetEnvironmentVariable(TEXT("GC_LOG_FILE"), pathBuf,
@@ -1327,18 +1423,44 @@ GC_API void GC_CALL GC_enable_incremental(void)
         if (len > 4 && pathBuf[len - 4] == (TCHAR)'.') {
           len -= 4; /* strip executable file extension */
         }
-        BCOPY(TEXT("." GC_LOG_STD_NAME), &pathBuf[len],
-              sizeof(TEXT("." GC_LOG_STD_NAME)));
+        BCOPY(TEXT(".") TEXT(GC_LOG_STD_NAME), &pathBuf[len],
+              sizeof(TEXT(".") TEXT(GC_LOG_STD_NAME)));
 #     endif
     }
+#   endif
 
-    hFile = CreateFile(logPath, GENERIC_WRITE, FILE_SHARE_READ,
+#   ifndef MSWINRT
+      hFile = CreateFile(logPath, GENERIC_WRITE, FILE_SHARE_READ,
                        NULL /* lpSecurityAttributes */,
                        appendToFile ? OPEN_ALWAYS : CREATE_ALWAYS,
                        GC_print_stats == VERBOSE ? FILE_ATTRIBUTE_NORMAL :
                             /* immediately flush writes unless very verbose */
                             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
                        NULL /* hTemplateFile */);
+#   else
+      {
+        if (GetWinRTLogPath(pathBuf, MAX_PATH + 1))
+        {
+          CREATEFILE2_EXTENDED_PARAMETERS extendedParameters;
+          ZeroMemory(&extendedParameters, sizeof(extendedParameters));
+
+          extendedParameters.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+          extendedParameters.dwFileFlags = GC_print_stats == VERBOSE
+            ? 0
+            : /* immediately flush writes unless very verbose */ FILE_FLAG_WRITE_THROUGH;
+          extendedParameters.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+
+          hFile = CreateFile2(logPath, GENERIC_WRITE, FILE_SHARE_READ,
+            appendToFile ? OPEN_ALWAYS : CREATE_ALWAYS,
+            &extendedParameters);
+        }
+        else
+        {
+          hFile = INVALID_HANDLE_VALUE;
+        }
+      }
+#   endif
+
 #   ifndef NO_GETENV_WIN32
       if (appendToFile && hFile != INVALID_HANDLE_VALUE) {
         LONG posHigh = 0;
@@ -1448,14 +1570,22 @@ GC_API void GC_CALL GC_enable_incremental(void)
 # define WRITE(level, buf, unused_len) \
                 __android_log_write(level, GC_ANDROID_LOG_TAG, buf)
 
+#elif defined(NN_PLATFORM_CTR)
+  int n3ds_log_write(const char* text, int length);
+# define WRITE(level, buf, len) n3ds_log_write((buf), (len))
+
+#elif defined(NN_BUILD_TARGET_PLATFORM_NX)
+  int switch_log_write(const char* text, int length);
+# define WRITE(level, buf, len) switch_log_write((buf), (len))
+
 #else
-# if !defined(AMIGA) && !defined(__CC_ARM)
+# if !defined(AMIGA) && !defined(__CC_ARM) && !defined(_XBOX_ONE) && !defined(SN_TARGET_ORBIS) && !defined(SN_TARGET_PSP2)
 #   include <unistd.h>
 # endif
 
   STATIC int GC_write(int fd, const char *buf, size_t len)
   {
-#   if defined(ECOS) || defined(NOSYS)
+#   if defined(ECOS) || defined(NOSYS) || defined(SN_TARGET_ORBIS) || defined(SN_TARGET_PSP2)
 #     ifdef ECOS
         /* FIXME: This seems to be defined nowhere at present.  */
         /* _Jv_diag_write(buf, len); */
@@ -1640,7 +1770,7 @@ GC_API GC_warn_proc GC_CALL GC_get_warn_proc(void)
     GC_find_leak = FALSE; /* disable at-exit GC_gcollect()  */
 
     if (msg != NULL) {
-#     if defined(MSWIN32)
+#     if defined(MSWIN32) && !defined(MSWINRT) && !defined(_XBOX_ONE)
 #       ifndef DONT_USE_USER32_DLL
           /* Use static binding to "user32.dll".        */
           (void)MessageBoxA(NULL, msg, "Fatal error in GC",
@@ -2194,4 +2324,37 @@ GC_API void GC_CALL GC_set_force_unmap_on_gcollect(int value)
 GC_API int GC_CALL GC_get_force_unmap_on_gcollect(void)
 {
     return (int)GC_force_unmap_on_gcollect;
+}
+
+/* Unity specific APIs */
+GC_API void GC_CALL GC_stop_world_external()
+{
+    LOCK();
+    STOP_WORLD();
+}
+
+GC_API void GC_CALL GC_start_world_external()
+{
+    START_WORLD();
+    UNLOCK();
+}
+
+
+STATIC GC_on_event_proc GC_on_event = NULL;
+
+GC_API void GC_CALL GC_set_on_event(GC_on_event_proc fn)
+{
+    GC_on_event = fn;
+}
+
+GC_API GC_on_event_proc GC_CALL GC_get_on_event(void)
+{
+    return GC_on_event;
+}
+
+
+GC_INNER void GC_send_event(GCEventType event_type)
+{
+    if (GC_on_event)
+      GC_on_event (event_type);
 }
