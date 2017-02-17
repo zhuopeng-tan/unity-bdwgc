@@ -290,7 +290,7 @@ GC_process_togglerefs (void)
     if (r.strong_ref)
       obj = r.strong_ref;
     else if (r.weak_ref)
-      obj = REVEAL_POINTER (r.weak_ref);
+      obj = GC_REVEAL_POINTER (r.weak_ref);
     else
       continue;
 
@@ -306,7 +306,7 @@ GC_process_togglerefs (void)
       break;
     case GC_TOGGLE_REF_WEAK:
       GC_toggleref_array [w].strong_ref = NULL;
-      GC_toggleref_array [w].weak_ref = HIDE_POINTER (obj);
+      GC_toggleref_array [w].weak_ref = GC_HIDE_POINTER (obj);
       ++w;
       break;
     default:
@@ -366,7 +366,7 @@ static void GC_clear_togglerefs ()
   int i;
   for (i = 0; i < GC_toggleref_array_size; ++i) {
     if (GC_toggleref_array [i].weak_ref) {
-      GC_PTR object = REVEAL_POINTER (GC_toggleref_array [i].weak_ref);
+      GC_PTR object = GC_REVEAL_POINTER (GC_toggleref_array [i].weak_ref);
 
       if (!GC_is_marked (object)) {
         GC_toggleref_array [i].weak_ref = (GC_hidden_pointer)NULL; /* We defer compaction to only happen on the callback step. */
@@ -427,7 +427,7 @@ GC_toggleref_add (GC_PTR object, int strong_ref)
     goto end;
   }
   GC_toggleref_array [GC_toggleref_array_size].strong_ref = strong_ref ? object : NULL;
-  GC_toggleref_array [GC_toggleref_array_size].weak_ref = strong_ref ? (GC_hidden_pointer)NULL : HIDE_POINTER (object);
+  GC_toggleref_array [GC_toggleref_array_size].weak_ref = strong_ref ? (GC_hidden_pointer)NULL : GC_HIDE_POINTER (object);
   ++GC_toggleref_array_size;
 
 end:

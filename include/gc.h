@@ -150,6 +150,10 @@ typedef enum {
     GC_EVENT_POST_START_WORLD
 } GCEventType;
 
+GC_API void GC_set_on_collection_event GC_PROTO((void(*) (GC_EventType)));
+                        /* Set callback invoked at specific points      */
+                        /* during every collection.                     */
+
 typedef void (GC_CALLBACK * GC_on_event_proc)(GCEventType /* event_type */);
                         /* Invoked when the heap grows or shrinks.      */
                         /* Called with the world stopped (and the       */
@@ -1344,6 +1348,12 @@ GC_API void * GC_CALL GC_call_with_stack_base(GC_stack_base_func /* fn */,
   /* Return non-zero (TRUE) if and only if the calling thread is        */
   /* registered with the garbage collector.                             */
   GC_API int GC_CALL GC_thread_is_registered(void);
+
+  /* Notify the collector about the stack and the altstack of the current thread */
+  /* STACK/STACK_SIZE is used to determine the stack dimensions when a thread is
+   * suspended while it is on an altstack.
+   */
+  GC_API void GC_register_altstack GC_PROTO((void *stack, int stack_size, void *altstack, int altstack_size));
 
   /* Unregister the current thread.  Only an explicitly registered      */
   /* thread (i.e. for which GC_register_my_thread() returns GC_SUCCESS) */
