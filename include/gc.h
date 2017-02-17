@@ -40,11 +40,19 @@
 
 #include "gc_config_macros.h"
 
+# if defined(__STDC__) || defined(__cplusplus) || defined(_AIX)
+#   define GC_PROTO(args) args
+typedef void * GC_PTR;
+#   define GC_CONST const
+# else
+#   define GC_PROTO(args) ()
+typedef char * GC_PTR;
+#   define GC_CONST
+#  endif
+
 #ifdef __cplusplus
   extern "C" {
 #endif
-
-typedef void * GC_PTR;  /* preserved only for backward compatibility    */
 
 /* Define word and signed_word to be unsigned and signed types of the   */
 /* size as char * or void *.  There seems to be no way to do this       */
@@ -1141,6 +1149,19 @@ GC_API int GC_CALL GC_move_long_link(void ** /* link */,
 GC_API int GC_CALL GC_unregister_long_link(void ** /* link */);
         /* Similar to GC_unregister_disappearing_link but for a */
         /* registration by either of the above two routines.    */
+
+typedef enum {
+	GC_TOGGLE_REF_DROP,
+	GC_TOGGLE_REF_STRONG,
+	GC_TOGGLE_REF_WEAK
+} GC_ToggleRefStatus;
+
+/* toggleref support */
+GC_API void GC_set_toggleref_func GC_PROTO(
+(GC_ToggleRefStatus(*proccess_toggleref) (GC_PTR obj)));
+GC_API int GC_toggleref_add(GC_PTR object, int strong_ref);
+/* Returns GC_SUCCESS if registration succeeded (or no callback	*/
+/* registered yet), GC_NO_MEMORY if failed for lack of memory.	*/
 
 /* Returns !=0 if GC_invoke_finalizers has something to do.     */
 GC_API int GC_CALL GC_should_invoke_finalizers(void);
