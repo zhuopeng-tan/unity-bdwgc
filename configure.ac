@@ -857,12 +857,34 @@ if test "${enable_munmap}" != ""; then
     fi
     AC_DEFINE_UNQUOTED([MUNMAP_THRESHOLD], [${MUNMAP_THRESHOLD}],
         [Number of GC cycles to wait before unmapping an unused block.])
-else
+fi
+
+AC_ARG_ENABLE(mmap,
+    [AC_HELP_STRING([--enable-mmap=yes|no],
+        [return page to the os if empty for N collections])],
+    gc_use_mmap=$enableval)
     if test "${gc_use_mmap}" = "yes"; then
       AC_DEFINE([USE_MMAP], 1,
                 [Define to use mmap instead of sbrk to expand the heap.])
     fi
-fi
+
+AC_ARG_ENABLE(ignore-dynamic-loading,
+    [AC_HELP_STRING([--enable-ignore-dynamic-loading=yes|no],
+        [Don't define DYNAMIC_LOADING even if supported])],
+    ignore_dynamic_loading=$enableval)
+    if test "${ignore_dynamic_loading}" = "yes"; then
+      AC_DEFINE([IGNORE_DYNAMIC_LOADING], 1,
+                [Don't define DYNAMIC_LOADING even if supported])
+    fi
+
+AC_ARG_ENABLE(dont-register-main-static-data,
+    [AC_HELP_STRING([--enable-dont-register-main-static-data=yes|no],
+        [GC_DONT_REGISTER_MAIN_STATIC_DATA])],
+    dont_register_main_static_data=$enableval)
+    if test "${dont_register_main_static_data}" = "yes"; then
+      AC_DEFINE([GC_DONT_REGISTER_MAIN_STATIC_DATA], 1,
+                [GC_DONT_REGISTER_MAIN_STATIC_DATA])
+    fi
 
 AM_CONDITIONAL(USE_LIBDIR, test -z "$with_cross_host")
 
@@ -887,9 +909,10 @@ AC_ARG_WITH([libatomic-ops],
 # Note: "syntax error near unexpected token ATOMIC_OPS" reported by configure
 # means Autotools pkg.m4 file was not found during aclocal.m4 generation.
 missing_libatomic_ops=false
-AS_IF([test x"$with_libatomic_ops" != xno],
-  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops], [],
-                      [ missing_libatomic_ops=true ]) ])
+#Mike - PKG_CHECK_MODULES is causing a syntax error, that the workarounds aren't fixing, remove this check for now
+#AS_IF([test x"$with_libatomic_ops" != xno],
+#  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops], [],
+#                      [ missing_libatomic_ops=true ]) ])
 AS_IF([test x$missing_libatomic_ops = xtrue ],
       [ AS_IF([test x"$with_libatomic_ops" != xcheck],
               [ AC_MSG_ERROR([An external libatomic_ops was not found]) ])
