@@ -34,7 +34,7 @@ AM_CPPFLAGS = \
 
 # Initialize variables so that we can declare files locally.
 EXTRA_DIST =
-lib_LTLIBRARIES =
+noinst_LTLIBRARIES =
 include_HEADERS =
 pkginclude_HEADERS =
 dist_noinst_HEADERS =
@@ -48,8 +48,8 @@ pkgconfig_DATA = bdw-gc.pc
 # C Library
 # ---------
 
-lib_LTLIBRARIES += libgc.la
-lib_LTLIBRARIES += libgc-static.la
+noinst_LTLIBRARIES += libgc.la
+noinst_LTLIBRARIES += libgc-static.la
 if SINGLE_GC_OBJ
 libgc_la_SOURCES = extra/gc.c
 else
@@ -118,7 +118,7 @@ EXTRA_libgc_static_la_SOURCES = $(EXTRA_libgc_la_SOURCES)
 # -------------
 
 if CPLUSPLUS
-lib_LTLIBRARIES += libgccpp.la
+noinst_LTLIBRARIES += libgccpp.la
 pkginclude_HEADERS += include/gc_cpp.h
 include_HEADERS += include/extra/gc_cpp.h
 libgccpp_la_SOURCES = gc_cpp.cc
