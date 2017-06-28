@@ -417,6 +417,8 @@ GC_API void GC_CALL GC_atfork_child(void);
 /* from the main program instead.                                       */
 GC_API void GC_CALL GC_init(void);
 
+GC_API void GC_CALL GC_deinit(void);
+
 /* General purpose allocation routines, with roughly malloc calling     */
 /* conv.  The atomic versions promise that no relevant pointers are     */
 /* contained in the object.  The non-atomic versions guarantee that the */
