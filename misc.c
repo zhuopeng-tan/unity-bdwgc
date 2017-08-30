@@ -346,14 +346,24 @@ GC_INNER void GC_extend_size_map(size_t i)
   }
 #endif
 
+#ifdef __EMSCRIPTEN__
+#define UNITY_NO_CLEAR_STACK 1
+#else
+#define UNITY_SMALL_CLEAR_STACK 1
+#endif
+
 /* Clear some of the inaccessible part of the stack.  Returns its       */
 /* argument, so it can be used in a tail call position, hence clearing  */
 /* another frame.                                                       */
 GC_API void * GC_CALL GC_clear_stack(void *arg)
 {
-#ifdef __EMSCRIPTEN__
+#ifdef UNITY_NO_CLEAR_STACK
     return arg;
-#endif
+#elif defined(UNITY_SMALL_CLEAR_STACK)
+	word volatile dummy[SMALL_CLEAR_SIZE];
+	BZERO ((void *)dummy, SMALL_CLEAR_SIZE * sizeof (word));
+	return arg;
+#else
     ptr_t sp = GC_approx_sp();  /* Hotter than actual sp */
 #   ifdef THREADS
         word volatile dummy[SMALL_CLEAR_SIZE];
@@ -422,6 +432,7 @@ GC_API void * GC_CALL GC_clear_stack(void *arg)
         GC_bytes_allocd_at_reset = GC_bytes_allocd;
     }
     return(arg);
+# endif
 # endif
 }
 
