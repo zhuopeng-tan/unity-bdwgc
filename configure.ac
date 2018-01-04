@@ -946,6 +946,15 @@ AC_ARG_ENABLE(dont-register-main-static-data,
                 [GC_DONT_REGISTER_MAIN_STATIC_DATA])
     fi
 
+AC_ARG_ENABLE(ignore-prog-data-start,
+    [AC_HELP_STRING([--enable-ignore-prog-data-start=yes|no],
+        [IGNORE_PROG_DATA_START])],
+    ignore_prog_data_start=$enableval)
+    if test "${ignore_prog_data_start}" = "yes"; then
+      AC_DEFINE([IGNORE_PROG_DATA_START], 1,
+                [IGNORE_PROG_DATA_START])
+    fi
+
 AM_CONDITIONAL(USE_LIBDIR, test -z "$with_cross_host")
 
 AC_ARG_ENABLE(single-obj-compilation,
