@@ -367,29 +367,6 @@ STATIC void GC_restart_handler(int sig)
 # endif
 }
 
-# ifdef USE_TKILL_ON_ANDROID
-    extern int tkill(pid_t tid, int sig); /* from sys/linux-unistd.h */
-
-    static int android_thread_kill(pid_t tid, int sig)
-    {
-      int ret;
-      int old_errno = errno;
-
-      ret = tkill(tid, sig);
-      if (ret < 0) {
-          ret = errno;
-          errno = old_errno;
-      }
-      return ret;
-    }
-
-#   define THREAD_SYSTEM_ID(t) (t)->kernel_id
-#   define RAISE_SIGNAL(t, sig) android_thread_kill(THREAD_SYSTEM_ID(t), sig)
-# else
-#   define THREAD_SYSTEM_ID(t) (t)->id
-#   define RAISE_SIGNAL(t, sig) pthread_kill(THREAD_SYSTEM_ID(t), sig)
-# endif /* !USE_TKILL_ON_ANDROID */
-
 # ifdef GC_ENABLE_SUSPEND_THREAD
 #   include <sys/time.h>
 
@@ -458,7 +435,7 @@ STATIC void GC_restart_handler(int sig)
 #     endif
 
       /* TODO: Support GC_retry_signals */
-      switch (RAISE_SIGNAL(t, GC_sig_suspend)) {
+      switch (pthread_kill(t->id, GC_sig_suspend)) {
       /* ESRCH cannot happen as terminated threads are handled above.   */
       case 0:
         break;
@@ -660,7 +637,7 @@ STATIC int GC_suspend_all(void)
                                      (void *)p->id);
               }
 #           else
-              result = RAISE_SIGNAL(p, GC_sig_suspend);
+              result = pthread_kill(p->id, GC_sig_suspend);
               switch(result) {
                 case ESRCH:
                     /* Not really there anymore.  Possible? */
@@ -669,7 +646,7 @@ STATIC int GC_suspend_all(void)
                 case 0:
                     if (GC_on_thread_event)
                       GC_on_thread_event(GC_EVENT_THREAD_SUSPENDED,
-                                         (void *)(word)THREAD_SYSTEM_ID(p));
+                                         (void *)(word)p->id);
                                 /* Note: thread id might be truncated.  */
                     break;
                 default:
@@ -1032,7 +1009,7 @@ GC_INNER void GC_start_world(void)
             if (GC_on_thread_event)
               GC_on_thread_event(GC_EVENT_THREAD_UNSUSPENDED, (void *)p->id);
 #         else
-            result = RAISE_SIGNAL(p, GC_sig_thr_restart);
+            result = pthread_kill(p->id, GC_sig_thr_restart);
             switch(result) {
                 case ESRCH:
                     /* Not really there anymore.  Possible? */
@@ -1041,7 +1018,7 @@ GC_INNER void GC_start_world(void)
                 case 0:
                     if (GC_on_thread_event)
                       GC_on_thread_event(GC_EVENT_THREAD_UNSUSPENDED,
-                                         (void *)(word)THREAD_SYSTEM_ID(p));
+                                         (void *)(word)p->id);
                     break;
                 default:
                     ABORT_ARG1("pthread_kill failed at resume",
