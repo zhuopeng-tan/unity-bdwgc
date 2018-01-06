@@ -993,9 +993,9 @@ AS_IF([test x"$with_libatomic_ops" != xno -a x"$THREADS" != xnone],
 # means Autotools pkg.m4 file was not found during aclocal.m4 generation;
 # in this case, most probably, you should run pkg-config once before running
 # autogen.sh (autoreconf); alternatively, comment out the following 3 lines.
-AS_IF([test x$missing_libatomic_ops = xtrue],
-  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops],
-    [ missing_libatomic_ops=false ], [ [] ]) ])
+#AS_IF([test x$missing_libatomic_ops = xtrue],
+#  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops],
+#    [ missing_libatomic_ops=false ], [ [] ]) ])
 
 # Retry with AC_CHECK_HEADER if PKG_CHECK_MODULES failed.
 AS_IF([test x$missing_libatomic_ops = xtrue],
