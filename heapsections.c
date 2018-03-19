@@ -39,6 +39,18 @@ void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback)
 		ptr_t sectionStart = GC_heap_sects[i].hs_start;
 		ptr_t sectionEnd = sectionStart + GC_heap_sects[i].hs_bytes;
 
+		/* Merge in contiguous sections. Copied from GC_dump_regions
+
+		A free block might start in one heap section and extend
+		into the next one. Merging the section avoids crashes when
+		trying to copy the start of section that is a free block
+		continued from the previous section. */
+		while (i + 1 < GC_n_heap_sects && GC_heap_sects[i + 1].hs_start == sectionEnd)
+		{
+			++i;
+			sectionEnd = GC_heap_sects[i].hs_start + GC_heap_sects[i].hs_bytes;
+		}
+
 		while (sectionStart < sectionEnd)
 		{
 			struct hblk* nextFreeBlock = GetNextFreeBlock(sectionStart);
