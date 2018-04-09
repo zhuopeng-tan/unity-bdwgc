@@ -122,3 +122,8 @@ stamp-h1
 /*.stackdump
 /*.sym
 /*.tmp
+
+# Project Files
+/projects/.vs*
+/projects/BoehmGC.VC.db
+/projects/Debug
