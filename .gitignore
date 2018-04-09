@@ -127,3 +127,5 @@ stamp-h1
 /projects/.vs*
 /projects/BoehmGC.VC.db
 /projects/Debug
+/projects/Release
+/projects/x64
