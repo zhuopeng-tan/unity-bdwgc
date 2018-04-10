@@ -92,6 +92,7 @@ void RunGCBenchmark(const char* name, void(*testFunc)(size_t, size_t), size_t nu
 	testFunc(numObjects, size);
 	
 	EndBenchmark(startTime);
+	GC_gcollect();
 }
 
 void RunGCBenchmark(const char* name, void(*testFunc)(size_t, size_t, size_t), size_t numLists, size_t numObjectsPerList, size_t size)
@@ -112,9 +113,10 @@ void AllocateObjects(size_t numObjects, size_t size)
 
 void AllocateLinkedLists(size_t numLists, size_t numObjectsPerList, size_t size)
 {
+	void** roots = (void**)calloc(numLists, sizeof(void*));
 	for (int i=0; i<numLists; i++)
 	{
-		void *start = GC_malloc_uncollectable(size);
+		void *start = roots[i] = GC_malloc_uncollectable(size);
 		void *lastObject = start;
 		for (int j=1; j<numObjectsPerList; j++)
 		{
@@ -124,14 +126,19 @@ void AllocateLinkedLists(size_t numLists, size_t numObjectsPerList, size_t size)
 			lastObject = obj;
 		}
 	}
+
+	for (int i=0; i<numLists; i++)
+	{
+		GC_free(roots[i]);
+	}
 }
 
 int main(int argc, const char * argv[])
 {
 	GC_INIT();
 	GC_set_on_event(GcCallback);
-    // value is in milliseconds
-    GC_set_time_limit(1);
+	// value is in milliseconds
+	GC_set_time_limit(1);
 	GC_enable_incremental();
 
 	RunGCBenchmark("Allocate Objects", AllocateObjects, 1000, 16);
