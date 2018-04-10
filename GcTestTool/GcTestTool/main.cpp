@@ -130,6 +130,8 @@ int main(int argc, const char * argv[])
 {
 	GC_INIT();
 	GC_set_on_event(GcCallback);
+    // value is in milliseconds
+    GC_set_time_limit(1);
 	GC_enable_incremental();
 
 	RunGCBenchmark("Allocate Objects", AllocateObjects, 1000, 16);
