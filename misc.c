@@ -350,6 +350,9 @@ GC_INNER void GC_extend_size_map(size_t i)
 #define UNITY_NO_CLEAR_STACK 1
 #else
 #define UNITY_SMALL_CLEAR_STACK 1
+# ifndef SMALL_CLEAR_SIZE
+#   define SMALL_CLEAR_SIZE 256 /* Clear this much every time.          */
+# endif
 #endif
 
 /* Clear some of the inaccessible part of the stack.  Returns its       */

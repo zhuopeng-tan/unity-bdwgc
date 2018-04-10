@@ -16,5 +16,9 @@
 #define USE_MUNMAP 1*/
 
 #define MANUAL_VDB
+/*
+#define GC_THREADS 1
+#define THREAD_LOCAL_ALLOC 1
+ */
 
 #endif /* defines_h */
