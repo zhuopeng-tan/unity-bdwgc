@@ -489,10 +489,10 @@ GC_INNER GC_bool GC_try_to_collect_inner(GC_stop_func stop_func)
  * cleanup gets expensive.
  */
 #ifndef GC_RATE
-# define GC_RATE 10
+# define GC_RATE 2
 #endif
 #ifndef MAX_PRIOR_ATTEMPTS
-# define MAX_PRIOR_ATTEMPTS 1
+# define MAX_PRIOR_ATTEMPTS 50
 #endif
         /* Maximum number of prior attempts at world stop marking       */
         /* A value of 1 means that we finish the second time, no matter */
