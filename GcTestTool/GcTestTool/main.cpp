@@ -1,4 +1,4 @@
-#if !_WIN32 
+#ifndef _WIN32 
 #include <sys/time.h>
 #else
 #define NOMINMAX
@@ -10,7 +10,7 @@
 
 extern "C" void GC_dirty(void* p);
 
-#if !_WIN32
+#ifndef _WIN32
 double GetTimeMs()
 {
 	struct timeval  tv;
@@ -162,6 +162,7 @@ int main(int argc, const char * argv[])
 	RunGCBenchmark("Allocate Linked Lists", AllocateLinkedLists, 10, 100, 65536);
 	RunGCBenchmark("Allocate Linked Lists", AllocateLinkedLists, 10, 1000, 65536);
 	RunGCBenchmark("Allocate Linked Lists", AllocateLinkedLists, 10, 10000, 65536);
-	
-	//GC_deinit();
+#ifndef _WIN32
+	GC_deinit();
+#endif
 }
