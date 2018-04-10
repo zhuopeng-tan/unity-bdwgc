@@ -3,6 +3,8 @@
 #include <algorithm>
 #include "include/gc.h"
 
+extern "C" void GC_dirty(void* p);
+
 double GetTimeMs()
 {
 	struct timeval  tv;
@@ -18,18 +20,21 @@ double maxGCTime = 0;
 double currentGCStart = 0;
 int gcCount = 0;
 
-void GcCallback(GCEventType event_type)\
+void GcCallback(GCEventType event_type)
 {
 	switch (event_type)
 	{
-		case GC_EVENT_START:
+		case GC_EVENT_PRE_STOP_WORLD:
+//		case GC_EVENT_START:
 			currentGCStart = GetTimeMs();
 			break;
-		case GC_EVENT_END:
+		case GC_EVENT_POST_START_WORLD:
+//		case GC_EVENT_END:
 			{
 				double thisGcTime = GetTimeMs() - currentGCStart;
 				totalGCTime += thisGcTime;
 				maxGCTime = std::max(thisGcTime, maxGCTime);
+				//printf("gc: %lf\n", thisGcTime);
 				gcCount++;
 			}
 			break;
@@ -48,6 +53,7 @@ double StartBenchmark()
 	totalGCTime = 0;
 	maxGCTime = 0;
 	currentGCStart = 0;
+	gcCount = 0;
 	
 	return GetTimeMs();
 }
@@ -95,6 +101,7 @@ void AllocateLinkedLists(size_t numLists, size_t numObjectsPerList, size_t size)
 		{
 			void *obj =GC_malloc(size);
 			*(void**)lastObject = obj;
+			GC_dirty(lastObject);
 			lastObject = obj;
 		}
 	}
@@ -104,6 +111,7 @@ int main(int argc, const char * argv[])
 {
 	GC_INIT();
 	GC_set_on_event(GcCallback);
+	GC_enable_incremental();
 
 	RunGCBenchmark("Allocate Objects", AllocateObjects, 1000, 16);
 	RunGCBenchmark("Allocate Objects", AllocateObjects, 10000, 16);
@@ -134,5 +142,5 @@ int main(int argc, const char * argv[])
 	RunGCBenchmark("Allocate Linked Lists", AllocateLinkedLists, 10, 1000, 65536);
 	RunGCBenchmark("Allocate Linked Lists", AllocateLinkedLists, 10, 10000, 65536);
 	
-	GC_deinit();
+	//GC_deinit();
 }

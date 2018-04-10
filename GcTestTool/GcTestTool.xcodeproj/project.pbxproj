@@ -25,6 +25,7 @@
 
 /* Begin PBXFileReference section */
 		7F4976B4207C11CD00C08399 /* gc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = gc.c; path = ../../extra/gc.c; sourceTree = "<group>"; };
+		7F4976B7207CFBFA00C08399 /* defines.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = defines.h; sourceTree = SOURCE_ROOT; };
 		7FE1724A207C114E008865AB /* GcTestTool */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = GcTestTool; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FE1724D207C114E008865AB /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -59,6 +60,7 @@
 		7FE1724C207C114E008865AB /* GcTestTool */ = {
 			isa = PBXGroup;
 			children = (
+				7F4976B7207CFBFA00C08399 /* defines.h */,
 				7F4976B4207C11CD00C08399 /* gc.c */,
 				7FE1724D207C114E008865AB /* main.cpp */,
 			);
@@ -168,6 +170,7 @@
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREFIX_HEADER = defines.h;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -225,6 +228,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREFIX_HEADER = defines.h;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
