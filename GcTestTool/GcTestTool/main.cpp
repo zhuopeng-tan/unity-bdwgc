@@ -146,6 +146,8 @@ int main(int argc, const char * argv[])
     GC_set_rate(8);
     // maximum incremental attempts before falling back to a full GC
     GC_set_max_prior_attempts(50);
+    // number of bytes allocated before a GC will occur
+    GC_set_min_bytes_allocd(1024*1024);
     // value is in milliseconds
 	GC_set_time_limit(1);
     

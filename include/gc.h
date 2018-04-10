@@ -376,6 +376,10 @@ GC_API int GC_CALL GC_get_rate(void);
 GC_API void GC_CALL GC_set_max_prior_attempts(int value);
 GC_API int GC_CALL GC_get_max_prior_attempts(void);
 
+
+GC_API void GC_CALL GC_set_min_bytes_allocd(int value);
+GC_API int GC_CALL GC_get_min_bytes_allocd(void);
+
 /* Public procedures */
 
 /* Set whether the GC will allocate executable memory pages or not.     */

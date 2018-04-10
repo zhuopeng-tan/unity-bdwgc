@@ -212,6 +212,18 @@ GC_API GC_stop_func GC_CALL GC_get_stop_func(void)
   GC_INNER word GC_total_stacksize = 0; /* updated on every push_all_stacks */
 #endif
 
+STATIC int GC_min_bytes_allocd = 1;
+
+GC_API void GC_CALL GC_set_min_bytes_allocd(int value)
+{
+    GC_min_bytes_allocd = value;
+}
+
+GC_API int GC_CALL GC_get_min_bytes_allocd(void)
+{
+    return GC_min_bytes_allocd;
+}
+
 /* Return the minimum number of bytes that must be allocated between    */
 /* collections to amortize the collection cost.  Should be non-zero.    */
 static word min_bytes_allocd(void)
@@ -253,7 +265,9 @@ static word min_bytes_allocd(void)
     if (GC_incremental) {
       result /= 2;
     }
-    return result > 0 ? result : 1;
+    return result > GC_min_bytes_allocd ? result : GC_min_bytes_allocd;
+
+
 }
 
 STATIC word GC_non_gc_bytes_at_gc = 0;
