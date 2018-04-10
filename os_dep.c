@@ -3883,7 +3883,7 @@ GC_INNER void GC_remove_protection(struct hblk *h, word nblocks,
 #include <pthread.h>
 
 /* These are not defined in any header, although they are documented */
-extern boolean_t
+/*extern boolean_t
 exc_server(mach_msg_header_t *, mach_msg_header_t *);
 
 extern kern_return_t
@@ -3903,7 +3903,7 @@ exception_raise_state_identity(mach_port_t, mach_port_t, mach_port_t,
                                mach_msg_type_number_t, thread_state_flavor_t*,
                                thread_state_t, mach_msg_type_number_t,
                                thread_state_t, mach_msg_type_number_t*);
-
+*/
 GC_API_OSCALL kern_return_t
 catch_exception_raise(mach_port_t exception_port, mach_port_t thread,
                       mach_port_t task, exception_type_t exception,
@@ -4285,7 +4285,7 @@ STATIC kern_return_t GC_forward_exception(mach_port_t thread, mach_port_t task,
 
   switch(behavior) {
     case EXCEPTION_STATE:
-      r = exception_raise_state(port, thread, task, exception, data, data_count,
+      r = exception_raise_state(port, /*thread, task,*/ exception, data, data_count,
                                 &flavor, thread_state, thread_state_count,
                                 thread_state, &thread_state_count);
       break;
