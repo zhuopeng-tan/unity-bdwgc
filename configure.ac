@@ -90,6 +90,15 @@ esac
 GC_CFLAGS=${gc_cflags}
 AC_SUBST(GC_CFLAGS)
 
+AC_ARG_ENABLE(verify-defines,
+    [AC_HELP_STRING([--enable-verify-defines=yes|no],
+        [Verify that the correct defines have been set for Unity.])],
+    verify_defines=$enableval)
+    if test "${verify_defines}" = "yes"; then
+      AC_DEFINE([VERIFY_UNITY_DEFINES], 1,
+                [Verify that the correct defines have been set for Unity.])
+    fi
+
 AC_ARG_ENABLE(threads,
   [AC_HELP_STRING([--enable-threads=TYPE], [choose threading package])],
   THREADS=$enableval,
@@ -120,8 +129,31 @@ AC_ARG_ENABLE(parallel-mark,
     esac ]
 )
 
+AC_ARG_ENABLE(thread-local-alloc,
+   [AC_HELP_STRING([--enable-thread-local-alloc=no|yes],
+        [enable thread local allocation optimization])],
+   thread_local_alloc=$enableval)
+
 AC_ARG_ENABLE(cplusplus,
     [AC_HELP_STRING([--enable-cplusplus], [install C++ support])])
+
+AC_ARG_ENABLE(no-threads-discovery,
+    [AC_HELP_STRING([--enable-no-threads-discovery=yes|no],
+        [Disable threads discovery in GC])],
+    gc_no_thread_discovery=$enableval)
+    if test "${gc_no_thread_discovery}" = "yes"; then
+      AC_DEFINE([GC_NO_THREADS_DISCOVERY], 1,
+                [Disable threads discovery in GC])
+    fi
+
+AC_ARG_ENABLE(gc-threads,
+    [AC_HELP_STRING([--enable-gc-threads=yes|no],
+        [Enable threads])],
+    gc_threads=$enableval)
+    if test "${gc_threads}" = "yes"; then
+      AC_DEFINE([GC_THREADS], 1,
+                [Enable threads])
+    fi
 
 dnl Features which may be selected in the following thread-detection switch.
 AH_TEMPLATE([PARALLEL_MARK], [Define to enable parallel marking.])
@@ -183,7 +215,9 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" != no; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         AC_MSG_WARN("Explicit GC_INIT() calls may be required.");
         ;;
      *-*-linux*)
@@ -201,7 +235,9 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" = yes; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         AC_MSG_WARN("Explicit GC_INIT() calls may be required.");
         THREADDLLIBS="-lpthread -lrt"
         # HPUX needs REENTRANT for the _r calls.
@@ -222,7 +258,9 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" = yes; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+          fi
         ;;
      *-*-kfreebsd*-gnu)
         AC_DEFINE(GC_FREEBSD_THREADS)
@@ -232,13 +270,17 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" = yes; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         AC_DEFINE(USE_COMPILER_TLS)
         ;;
      *-*-gnu*)
         AC_DEFINE(GC_GNU_THREADS)
         AC_DEFINE(_REENTRANT)
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         ;;
      *-*-netbsd*)
         AC_MSG_WARN("Only on NetBSD 2.0 or later.")
@@ -252,7 +294,9 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" != no; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         # Need to use alternate thread library, otherwise gctest hangs
         # on Solaris 8.
         multi_os_directory=`$CC -print-multi-os-directory`
@@ -267,7 +311,9 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" != no; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         # Cygwin doesn't have a real libpthread, so Libtool can't link
         # against it.
         THREADDLLIBS=""
@@ -279,7 +325,9 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" != no; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         THREADDLLIBS="-lpthread"
         win32_threads=true
         ;;
@@ -290,14 +338,18 @@ case "$THREADS" in
         if test "${enable_parallel_mark}" != no; then
           AC_DEFINE(PARALLEL_MARK)
         fi
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
         darwin_threads=true
         ;;
      *-*-osf*)
         AC_DEFINE(GC_OSF1_THREADS)
         if test "${enable_parallel_mark}" = yes; then
           AC_DEFINE(PARALLEL_MARK)
-          AC_DEFINE(THREAD_LOCAL_ALLOC)
+          if test "${thread_local_alloc}" != no; then
+            AC_DEFINE(THREAD_LOCAL_ALLOC)
+          fi
           AC_MSG_WARN("Explicit GC_INIT() calls may be required.");
           # May want to enable it in other cases, too.
           # Measurements have not yet been done.
@@ -322,11 +374,15 @@ case "$THREADS" in
     AC_DEFINE(GC_WIN32_THREADS)
     if test "${enable_parallel_mark}" != no; then
       AC_DEFINE(PARALLEL_MARK)
-      AC_DEFINE(THREAD_LOCAL_ALLOC)
+      if test "${thread_local_alloc}" != no; then
+        AC_DEFINE(THREAD_LOCAL_ALLOC)
+      fi
     else
       if test "${enable_shared}" != yes || test "${enable_static}" != no; then
         # Imply THREAD_LOCAL_ALLOC unless GC_DLL.
-        AC_DEFINE(THREAD_LOCAL_ALLOC)
+        if test "${thread_local_alloc}" != no; then
+          AC_DEFINE(THREAD_LOCAL_ALLOC)
+        fi
       fi
     fi
     if test "${enable_win32_dllmain}" = yes; then
@@ -345,7 +401,9 @@ case "$THREADS" in
     if test "${enable_parallel_mark}" = yes; then
         AC_DEFINE(PARALLEL_MARK)
     fi
-    AC_DEFINE(THREAD_LOCAL_ALLOC)
+    if test "${thread_local_alloc}" != no; then
+      AC_DEFINE(THREAD_LOCAL_ALLOC)
+    fi
     AC_MSG_WARN("Explicit GC_INIT() calls may be required.");
     AC_DEFINE([GC_DGUX386_THREADS], 1,
               [Define to enable support for DB/UX threads on i386.])
@@ -363,7 +421,9 @@ case "$THREADS" in
  rtems)
     THREADS=posix
     AC_DEFINE(GC_RTEMS_PTHREADS)
-    AC_DEFINE(THREAD_LOCAL_ALLOC)
+    if test "${thread_local_alloc}" != no; then
+      AC_DEFINE(THREAD_LOCAL_ALLOC)
+    fi
     ;;
  decosf1 | irix | mach | os2 | solaris | dce | vxworks)
     AC_MSG_ERROR(thread package $THREADS not yet supported)
@@ -857,12 +917,34 @@ if test "${enable_munmap}" != ""; then
     fi
     AC_DEFINE_UNQUOTED([MUNMAP_THRESHOLD], [${MUNMAP_THRESHOLD}],
         [Number of GC cycles to wait before unmapping an unused block.])
-else
+fi
+
+AC_ARG_ENABLE(mmap,
+    [AC_HELP_STRING([--enable-mmap=yes|no],
+        [return page to the os if empty for N collections])],
+    gc_use_mmap=$enableval)
     if test "${gc_use_mmap}" = "yes"; then
       AC_DEFINE([USE_MMAP], 1,
                 [Define to use mmap instead of sbrk to expand the heap.])
     fi
-fi
+
+AC_ARG_ENABLE(ignore-dynamic-loading,
+    [AC_HELP_STRING([--enable-ignore-dynamic-loading=yes|no],
+        [Don't define DYNAMIC_LOADING even if supported])],
+    ignore_dynamic_loading=$enableval)
+    if test "${ignore_dynamic_loading}" = "yes"; then
+      AC_DEFINE([IGNORE_DYNAMIC_LOADING], 1,
+                [Don't define DYNAMIC_LOADING even if supported])
+    fi
+
+AC_ARG_ENABLE(dont-register-main-static-data,
+    [AC_HELP_STRING([--enable-dont-register-main-static-data=yes|no],
+        [GC_DONT_REGISTER_MAIN_STATIC_DATA])],
+    dont_register_main_static_data=$enableval)
+    if test "${dont_register_main_static_data}" = "yes"; then
+      AC_DEFINE([GC_DONT_REGISTER_MAIN_STATIC_DATA], 1,
+                [GC_DONT_REGISTER_MAIN_STATIC_DATA])
+    fi
 
 AM_CONDITIONAL(USE_LIBDIR, test -z "$with_cross_host")
 
@@ -887,9 +969,10 @@ AC_ARG_WITH([libatomic-ops],
 # Note: "syntax error near unexpected token ATOMIC_OPS" reported by configure
 # means Autotools pkg.m4 file was not found during aclocal.m4 generation.
 missing_libatomic_ops=false
-AS_IF([test x"$with_libatomic_ops" != xno],
-  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops], [],
-                      [ missing_libatomic_ops=true ]) ])
+#Mike - PKG_CHECK_MODULES is causing a syntax error, that the workarounds aren't fixing, remove this check for now
+#AS_IF([test x"$with_libatomic_ops" != xno],
+#  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops], [],
+#                      [ missing_libatomic_ops=true ]) ])
 AS_IF([test x$missing_libatomic_ops = xtrue ],
       [ AS_IF([test x"$with_libatomic_ops" != xcheck],
               [ AC_MSG_ERROR([An external libatomic_ops was not found]) ])

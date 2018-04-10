@@ -34,7 +34,7 @@ AM_CPPFLAGS = \
 
 # Initialize variables so that we can declare files locally.
 EXTRA_DIST =
-lib_LTLIBRARIES =
+noinst_LTLIBRARIES =
 include_HEADERS =
 pkginclude_HEADERS =
 dist_noinst_HEADERS =
@@ -48,7 +48,8 @@ pkgconfig_DATA = bdw-gc.pc
 # C Library
 # ---------
 
-lib_LTLIBRARIES += libgc.la
+noinst_LTLIBRARIES += libgc.la
+noinst_LTLIBRARIES += libgc-static.la
 if SINGLE_GC_OBJ
 libgc_la_SOURCES = extra/gc.c
 else
@@ -86,6 +87,8 @@ endif
 
 endif
 
+libgc_static_la_SOURCES = $(libgc_la_SOURCES)
+
 if USE_INTERNAL_LIBATOMIC_OPS
 nodist_libgc_la_SOURCES = libatomic_ops/src/atomic_ops.c
 endif
@@ -93,6 +96,8 @@ endif
 if NEED_ATOMIC_OPS_ASM
 nodist_libgc_la_SOURCES = libatomic_ops/src/atomic_ops_sysdeps.S
 endif
+
+nodist_libgc_static_la_SOURCES = $(nodist_libgc_la_SOURCES)
 
 # Include THREADDLLIBS here to ensure that the correct versions of
 # linuxthread semaphore functions get linked:
@@ -103,12 +108,17 @@ libgc_la_LDFLAGS = $(extra_ldflags_libgc) -version-info 1:3:0 -no-undefined
 EXTRA_libgc_la_SOURCES = src/ia64_save_regs_in_stack.s src/sparc_mach_dep.S \
     src/sparc_netbsd_mach_dep.s src/sparc_sunos4_mach_dep.s
 
+libgc_static_la_LIBADD = $(libgc_la_LIBADD)
+libgc_static_la_DEPENDENCIES = $(libgc_la_DEPENDENCIES)
+libgc_static_la_LDFLAGS = -static
+
+EXTRA_libgc_static_la_SOURCES = $(EXTRA_libgc_la_SOURCES)
 
 # C++ Interface
 # -------------
 
 if CPLUSPLUS
-lib_LTLIBRARIES += libgccpp.la
+noinst_LTLIBRARIES += libgccpp.la
 pkginclude_HEADERS += include/gc_cpp.h
 include_HEADERS += include/extra/gc_cpp.h
 libgccpp_la_SOURCES = gc_cpp.cc

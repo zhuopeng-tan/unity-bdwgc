@@ -25,6 +25,24 @@
 # endif
 #endif
 
+#if VERIFY_UNITY_DEFINES
+#if ! (ALL_INTERIOR_POINTERS \
+        && GC_GCJ_SUPPORT \
+        && JAVA_FINALIZATION \
+        && NO_EXECUTE_PERMISSION \
+        && GC_VERSION_MAJOR == 7 \
+        && GC_VERSION_MINOR == 4 \
+        && GC_VERSION_MICRO == 0 \
+        && GC_NO_THREADS_DISCOVERY \
+        && IGNORE_DYNAMIC_LOADING \
+        && GC_DONT_REGISTER_MAIN_STATIC_DATA \
+        && GC_THREADS \
+        && USE_MMAP \
+        && USE_MUNMAP)
+            #error Unity Defines Incorrect
+#endif
+#endif
+
 /*
  * Separate free lists are maintained for different sized objects
  * up to MAXOBJBYTES.

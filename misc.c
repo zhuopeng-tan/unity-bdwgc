@@ -346,14 +346,24 @@ GC_INNER void GC_extend_size_map(size_t i)
   }
 #endif
 
+#ifdef __EMSCRIPTEN__
+#define UNITY_NO_CLEAR_STACK 1
+#else
+#define UNITY_SMALL_CLEAR_STACK 1
+#endif
+
 /* Clear some of the inaccessible part of the stack.  Returns its       */
 /* argument, so it can be used in a tail call position, hence clearing  */
 /* another frame.                                                       */
 GC_API void * GC_CALL GC_clear_stack(void *arg)
 {
-#ifdef __EMSCRIPTEN__
+#ifdef UNITY_NO_CLEAR_STACK
     return arg;
-#endif
+#elif defined(UNITY_SMALL_CLEAR_STACK)
+	word volatile dummy[SMALL_CLEAR_SIZE];
+	BZERO ((void *)dummy, SMALL_CLEAR_SIZE * sizeof (word));
+	return arg;
+#else
     ptr_t sp = GC_approx_sp();  /* Hotter than actual sp */
 #   ifdef THREADS
         word volatile dummy[SMALL_CLEAR_SIZE];
@@ -422,6 +432,7 @@ GC_API void * GC_CALL GC_clear_stack(void *arg)
         GC_bytes_allocd_at_reset = GC_bytes_allocd;
     }
     return(arg);
+# endif
 # endif
 }
 
@@ -1286,6 +1297,17 @@ GC_API void GC_CALL GC_enable_incremental(void)
   }
 #endif
 
+  GC_API void GC_CALL GC_deinit(void)
+  {
+    if (GC_is_initialized) {
+#if defined(THREADS) && (defined(MSWIN32) || defined(MSWINCE))
+      DeleteCriticalSection(&GC_write_cs);
+      DeleteCriticalSection(&GC_allocate_ml);
+#endif
+      GC_is_initialized = FALSE;
+    }
+  }
+
 #if defined(MSWIN32) || defined(MSWINCE)
 
 # if defined(_MSC_VER) && defined(_DEBUG) && !defined(MSWINCE)
@@ -1293,15 +1315,6 @@ GC_API void GC_CALL GC_enable_incremental(void)
 # endif
 
   STATIC HANDLE GC_log = 0;
-
-  void GC_deinit(void)
-  {
-#   ifdef THREADS
-      if (GC_is_initialized) {
-        DeleteCriticalSection(&GC_write_cs);
-      }
-#   endif
-  }
 
 # ifdef THREADS
 #   ifdef PARALLEL_MARK

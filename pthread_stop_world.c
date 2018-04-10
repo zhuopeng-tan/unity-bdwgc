@@ -434,24 +434,6 @@ GC_INNER void GC_push_all_stacks(void)
   int GC_stopping_pid = 0;
 #endif
 
-#ifdef PLATFORM_ANDROID
-  extern int tkill(pid_t tid, int sig); /* from sys/linux-unistd.h */
-
-  static int android_thread_kill(pid_t tid, int sig)
-  {
-    int ret;
-    int old_errno = errno;
-
-    ret = tkill(tid, sig);
-    if (ret < 0) {
-        ret = errno;
-        errno = old_errno;
-    }
-
-    return ret;
-  }
-#endif /* PLATFORM_ANDROID */
-
 /* We hold the allocation lock.  Suspend all threads that might */
 /* still be running.  Return the number of suspend signals that */
 /* were sent.                                                   */
@@ -494,11 +476,7 @@ STATIC int GC_suspend_all(void)
                 p -> stop_info.stack_ptr = (ptr_t)stack.ss_sp - stack.ss_size;
               }
 #           else
-#             ifndef PLATFORM_ANDROID
                 result = pthread_kill(p -> id, GC_sig_suspend);
-#             else
-                result = android_thread_kill(p -> kernel_id, GC_sig_suspend);
-#             endif
               switch(result) {
                 case ESRCH:
                     /* Not really there anymore.  Possible? */
@@ -817,12 +795,7 @@ GC_INNER void GC_start_world(void)
             if (pthread_resume_np(p -> id) != 0)
               ABORT("pthread_resume_np failed");
 #         else
-#           ifndef PLATFORM_ANDROID
               result = pthread_kill(p -> id, GC_sig_thr_restart);
-#           else
-              result = android_thread_kill(p -> kernel_id,
-                                           GC_sig_thr_restart);
-#           endif
             switch(result) {
                 case ESRCH:
                     /* Not really there anymore.  Possible? */
