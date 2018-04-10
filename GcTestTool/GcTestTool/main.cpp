@@ -18,11 +18,20 @@ double GetTimeMs()
 	return time_in_mill;
 }
 #else
-double GetTimeMs()
+unsigned int GetTimeMs()
 {
-	SYSTEMTIME st;
+	/*SYSTEMTIME st;
 	GetSystemTime(&st);
 	return st.wMilliseconds;
+	*/
+	__int64 freq, time, time_milli;
+	unsigned int milliseconds;
+	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+	QueryPerformanceCounter((LARGE_INTEGER*)&time);
+
+	time_milli = ((time) * 1000) / freq;
+	milliseconds = (unsigned int)(time_milli & 0xffffffff);
+	return milliseconds;
 }
 #endif
 
