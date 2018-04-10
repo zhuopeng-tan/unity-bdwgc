@@ -76,20 +76,8 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../../include/;../../;../../../include/private;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ALL_INTERIOR_POINTERS=1;
-GC_GCJ_SUPPORT=1;
- JAVA_FINALIZATION=1;
-NO_EXECUTE_PERMISSION=1
-;GC_NO_THREADS_DISCOVERY=1
-;IGNORE_DYNAMIC_LOADING=1;
-GC_DONT_REGISTER_MAIN_STATIC_DATA=1
-;GC_VERSION_MAJOR=7;
-GC_VERSION_MINOR=4
-;GC_VERSION_MICRO=0
-;GC_THREADS=1
-;USE_MMAP=1
-;USE_MUNMAP=1;
-MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ForcedIncludeFiles>../GcTestTool/defines.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -98,20 +86,8 @@ MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../../include/;../../;../../../include/private;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ALL_INTERIOR_POINTERS=1;
-GC_GCJ_SUPPORT=1;
- JAVA_FINALIZATION=1;
-NO_EXECUTE_PERMISSION=1
-;GC_NO_THREADS_DISCOVERY=1
-;IGNORE_DYNAMIC_LOADING=1;
-GC_DONT_REGISTER_MAIN_STATIC_DATA=1
-;GC_VERSION_MAJOR=7;
-GC_VERSION_MINOR=4
-;GC_VERSION_MICRO=0
-;GC_THREADS=1
-;USE_MMAP=1
-;USE_MUNMAP=1;
-MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ForcedIncludeFiles>../GcTestTool/defines.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -122,20 +98,8 @@ MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../../include/;../../;../../../include/private;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ALL_INTERIOR_POINTERS=1;
-GC_GCJ_SUPPORT=1;
- JAVA_FINALIZATION=1;
-NO_EXECUTE_PERMISSION=1
-;GC_NO_THREADS_DISCOVERY=1
-;IGNORE_DYNAMIC_LOADING=1;
-GC_DONT_REGISTER_MAIN_STATIC_DATA=1
-;GC_VERSION_MAJOR=7;
-GC_VERSION_MINOR=4
-;GC_VERSION_MICRO=0
-;GC_THREADS=1
-;USE_MMAP=1
-;USE_MUNMAP=1;
-MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ForcedIncludeFiles>../GcTestTool/defines.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -150,20 +114,8 @@ MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../../include/;../../;../../../include/private;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;ALL_INTERIOR_POINTERS=1;
-GC_GCJ_SUPPORT=1;
- JAVA_FINALIZATION=1;
-NO_EXECUTE_PERMISSION=1
-;GC_NO_THREADS_DISCOVERY=1
-;IGNORE_DYNAMIC_LOADING=1;
-GC_DONT_REGISTER_MAIN_STATIC_DATA=1
-;GC_VERSION_MAJOR=7;
-GC_VERSION_MINOR=4
-;GC_VERSION_MICRO=0
-;GC_THREADS=1
-;USE_MMAP=1
-;USE_MUNMAP=1;
-MANUAL_VDB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ForcedIncludeFiles>../GcTestTool/defines.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

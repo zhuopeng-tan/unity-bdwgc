@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #else
 #define NOMINMAX
+#include <windows.h>
 #endif
 #include <stdio.h>
 #include <algorithm>
@@ -22,10 +23,6 @@ double GetTimeMs()
 #else
 unsigned int GetTimeMs()
 {
-	/*SYSTEMTIME st;
-	GetSystemTime(&st);
-	return st.wMilliseconds;
-	*/
 	__int64 freq, time, time_milli;
 	unsigned int milliseconds;
 	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
