@@ -1,8 +1,13 @@
+#if !_WIN32 
 #include <sys/time.h>
+#else
+#define NOMINMAX
+#endif
 #include <stdio.h>
 #include <algorithm>
 #include "include/gc.h"
 
+#if !_WIN32
 double GetTimeMs()
 {
 	struct timeval  tv;
@@ -12,6 +17,14 @@ double GetTimeMs()
 	(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000.0 ;
 	return time_in_mill;
 }
+#else
+double GetTimeMs()
+{
+	SYSTEMTIME st;
+	GetSystemTime(&st);
+	return st.wMilliseconds;
+}
+#endif
 
 double totalGCTime = 0;
 double maxGCTime = 0;
