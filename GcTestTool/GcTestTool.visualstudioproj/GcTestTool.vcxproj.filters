@@ -15,10 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="tests\Main.cpp">
+    <ClCompile Include="..\GcTestTool\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\extra\gc.c">
+    <ClCompile Include="..\..\extra\gc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

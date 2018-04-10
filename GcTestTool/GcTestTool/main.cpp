@@ -1,10 +1,15 @@
+#if !_WIN32 
 #include <sys/time.h>
+#else
+#define NOMINMAX
+#endif
 #include <stdio.h>
 #include <algorithm>
 #include "include/gc.h"
 
 extern "C" void GC_dirty(void* p);
 
+#if !_WIN32
 double GetTimeMs()
 {
 	struct timeval  tv;
@@ -14,6 +19,23 @@ double GetTimeMs()
 	(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000.0 ;
 	return time_in_mill;
 }
+#else
+unsigned int GetTimeMs()
+{
+	/*SYSTEMTIME st;
+	GetSystemTime(&st);
+	return st.wMilliseconds;
+	*/
+	__int64 freq, time, time_milli;
+	unsigned int milliseconds;
+	QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
+	QueryPerformanceCounter((LARGE_INTEGER*)&time);
+
+	time_milli = ((time) * 1000) / freq;
+	milliseconds = (unsigned int)(time_milli & 0xffffffff);
+	return milliseconds;
+}
+#endif
 
 double totalGCTime = 0;
 double maxGCTime = 0;

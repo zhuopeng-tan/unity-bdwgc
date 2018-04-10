@@ -124,6 +124,11 @@ stamp-h1
 /*.tmp
 
 # Project Files
-/projects/.vs*
-/projects/BoehmGC.VC.db
-/projects/Debug
+/GcTestTool/GcTestTool.visualstudioproj/.vs*
+/GcTestTool/GcTestTool.visualstudioproj/GcTestTool.VC.db
+/GcTestTool/GcTestTool.visualstudioproj/Debug
+/GcTestTool/GcTestTool.visualstudioproj/Release
+/GcTestTool/GcTestTool.visualstudioproj/x64
+/GcTestTool/GcTestTool.visualstudioproj/GcTestTool.VC.VC.opendb
+/GcTestTool/GcTestTool.visualstudioproj/GcTestTool.vcxproj.user
+
