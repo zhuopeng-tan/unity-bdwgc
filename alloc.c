@@ -660,7 +660,9 @@ STATIC GC_bool GC_stopped_mark(GC_stop_func stop_func)
 #           ifdef THREAD_LOCAL_ALLOC
               GC_world_stopped = FALSE;
 #           endif
+            GC_send_event (GC_EVENT_PRE_START_WORLD);
             START_WORLD();
+            GC_send_event (GC_EVENT_POST_START_WORLD);
             return(FALSE);
           }
           if (GC_mark_some(GC_approx_sp())) break;
