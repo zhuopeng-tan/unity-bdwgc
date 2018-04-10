@@ -131,6 +131,7 @@ void AllocateLinkedLists(size_t numLists, size_t numObjectsPerList, size_t size)
 	{
 		GC_free(roots[i]);
 	}
+	free(roots);
 }
 
 int main(int argc, const char * argv[])
