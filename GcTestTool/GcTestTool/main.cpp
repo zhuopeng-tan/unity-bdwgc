@@ -103,6 +103,7 @@ void RunGCBenchmark(const char* name, void(*testFunc)(size_t, size_t, size_t), s
 	testFunc(numLists, numObjectsPerList, size);
 	
 	EndBenchmark(startTime);
+    GC_gcollect();
 }
 
 void AllocateObjects(size_t numObjects, size_t size)
@@ -138,8 +139,16 @@ int main(int argc, const char * argv[])
 {
 	GC_INIT();
 	GC_set_on_event(GcCallback);
-	// value is in milliseconds
+    
+    // knobs to turn and tweak
+    
+    // minimal amount of pages to process at a time
+    GC_set_rate(8);
+    // maximum incremental attempts before falling back to a full GC
+    GC_set_max_prior_attempts(50);
+    // value is in milliseconds
 	GC_set_time_limit(1);
+    
 	GC_enable_incremental();
 
 	RunGCBenchmark("Allocate Objects", AllocateObjects, 1000, 16);

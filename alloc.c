@@ -520,6 +520,29 @@ GC_INNER GC_bool GC_try_to_collect_inner(GC_stop_func stop_func)
 STATIC int GC_deficit = 0;/* The number of extra calls to GC_mark_some  */
                           /* that we have made.                         */
 
+STATIC int GC_rate = GC_RATE;
+STATIC int GC_max_prior_attempts = MAX_PRIOR_ATTEMPTS;
+
+GC_API void GC_CALL GC_set_rate(int value)
+{
+    GC_rate = value;
+}
+
+GC_API int GC_CALL GC_get_rate(void)
+{
+    return GC_rate;
+}
+
+GC_API void GC_CALL GC_set_max_prior_attempts(int value)
+{
+    GC_max_prior_attempts = value;
+}
+
+GC_API int GC_CALL GC_get_max_prior_attempts(void)
+{
+    return GC_max_prior_attempts;
+}
+
 GC_INNER void GC_collect_a_little_inner(int n)
 {
     int i;
@@ -528,7 +551,7 @@ GC_INNER void GC_collect_a_little_inner(int n)
     if (GC_dont_gc) return;
     DISABLE_CANCEL(cancel_state);
     if (GC_incremental && GC_collection_in_progress()) {
-        for (i = GC_deficit; i < GC_RATE*n; i++) {
+        for (i = GC_deficit; i < GC_rate*n; i++) {
             if (GC_mark_some((ptr_t)0)) {
                 /* Need to finish a collection */
 #               ifdef SAVE_CALL_CHAIN
@@ -538,7 +561,7 @@ GC_INNER void GC_collect_a_little_inner(int n)
                     if (GC_parallel)
                       GC_wait_for_reclaim();
 #               endif
-                if (GC_n_attempts < MAX_PRIOR_ATTEMPTS
+                if (GC_n_attempts < GC_max_prior_attempts
                     && GC_time_limit != GC_TIME_UNLIMITED) {
 #                 ifndef NO_CLOCK
                     GET_TIME(GC_start_time);

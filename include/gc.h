@@ -370,6 +370,12 @@ GC_API GC_ATTR_DEPRECATED unsigned long GC_time_limit;
 GC_API void GC_CALL GC_set_time_limit(unsigned long);
 GC_API unsigned long GC_CALL GC_get_time_limit(void);
 
+GC_API void GC_CALL GC_set_rate(int value);
+GC_API int GC_CALL GC_get_rate(void);
+
+GC_API void GC_CALL GC_set_max_prior_attempts(int value);
+GC_API int GC_CALL GC_get_max_prior_attempts(void);
+
 /* Public procedures */
 
 /* Set whether the GC will allocate executable memory pages or not.     */
