@@ -30,9 +30,7 @@ AM_PROG_CC_C_O
 AC_PROG_CXX
 AM_PROG_AS
 AC_PROG_INSTALL
-LT_INIT([disable-static])
-# Only the shared libraries are produced by default, use "--enable-static"
-# option to override it.
+LT_INIT
 # Note: If Autoconf reports that LIBTOOL (or AC_ENABLE_SHARED, or
 # AC_PROG_LIBTOOL) is undefined, Libtool installation should be checked.
 
@@ -1019,9 +1017,9 @@ AS_IF([test x"$with_libatomic_ops" != xno -a x"$with_libatomic_ops" != xnone],
 # means Autotools pkg.m4 file was not found during aclocal.m4 generation;
 # in this case, most probably, you should run pkg-config once before running
 # autogen.sh (autoreconf); alternatively, comment out the following 3 lines.
-AS_IF([test x$missing_libatomic_ops = xtrue],
-  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops],
-    [ missing_libatomic_ops=false ], [ [] ]) ])
+#AS_IF([test x$missing_libatomic_ops = xtrue],
+#  [ PKG_CHECK_MODULES([ATOMIC_OPS], [atomic_ops],
+#    [ missing_libatomic_ops=false ], [ [] ]) ])
 
 # Retry with AC_CHECK_HEADER if PKG_CHECK_MODULES failed.
 AS_IF([test x$missing_libatomic_ops = xtrue],

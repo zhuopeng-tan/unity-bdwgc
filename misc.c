@@ -2516,3 +2516,16 @@ GC_API int GC_CALL GC_get_force_unmap_on_gcollect(void)
 {
     return (int)GC_force_unmap_on_gcollect;
 }
+
+/* Unity specific APIs */
+GC_API void GC_CALL GC_stop_world_external()
+{
+    LOCK();
+    STOP_WORLD();
+}
+
+GC_API void GC_CALL GC_start_world_external()
+{
+    START_WORLD();
+    UNLOCK();
+}
