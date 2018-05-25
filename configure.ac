@@ -1010,8 +1010,8 @@ fi
 # If not found, fail on "yes", and convert "check" to "no".
 # First, check that libatomic_ops usage is not disabled explicitly.
 missing_libatomic_ops=false
-AS_IF([test x"$with_libatomic_ops" != xno -a x"$with_libatomic_ops" != xnone],
-  [ missing_libatomic_ops=true ])
+#AS_IF([test x"$with_libatomic_ops" != xno -a x"$with_libatomic_ops" != xnone],
+#  [ missing_libatomic_ops=true ])
 
 # Note: "syntax error near unexpected token ATOMIC_OPS" reported by configure
 # means Autotools pkg.m4 file was not found during aclocal.m4 generation;
