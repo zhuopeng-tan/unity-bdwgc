@@ -2024,6 +2024,12 @@ GC_API void GC_CALL GC_win32_free_heap(void);
         (*GC_amiga_allocwrapper_do)(a,GC_malloc_atomic_ignore_off_page)
 #endif /* _AMIGA && !GC_AMIGA_MAKINGLIB */
 
+/* APIs for getting access to raw GC heap */
+/* These are NOT thread safe, so should be called with GC lock held */
+typedef void (*GC_heap_section_proc)(void* user_data, GC_PTR start, GC_PTR end);
+GC_API void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback);
+GC_API GC_word GC_get_heap_section_count();
+
 #ifdef __cplusplus
   } /* extern "C" */
 #endif

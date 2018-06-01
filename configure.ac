@@ -93,6 +93,15 @@ AC_SUBST(GC_CFLAGS)
 # Extra user-defined flags to pass both to C and C++ compilers.
 AC_SUBST([CFLAGS_EXTRA])
 
+AC_ARG_ENABLE(verify-defines,
+    [AC_HELP_STRING([--enable-verify-defines=yes|no],
+        [Verify that the correct defines have been set for Unity.])],
+    verify_defines=$enableval)
+    if test "${verify_defines}" = "yes"; then
+      AC_DEFINE([VERIFY_UNITY_DEFINES], 1,
+                [Verify that the correct defines have been set for Unity.])
+    fi
+
 AC_ARG_ENABLE(threads,
   [AC_HELP_STRING([--enable-threads=TYPE], [choose threading package])],
   THREADS=$enableval,
@@ -137,6 +146,24 @@ AC_ARG_ENABLE(thread-local-alloc,
 
 AC_ARG_ENABLE(cplusplus,
     [AC_HELP_STRING([--enable-cplusplus], [install C++ support])])
+
+AC_ARG_ENABLE(no-threads-discovery,
+    [AC_HELP_STRING([--enable-no-threads-discovery=yes|no],
+        [Disable threads discovery in GC])],
+    gc_no_thread_discovery=$enableval)
+    if test "${gc_no_thread_discovery}" = "yes"; then
+      AC_DEFINE([GC_NO_THREADS_DISCOVERY], 1,
+                [Disable threads discovery in GC])
+    fi
+
+AC_ARG_ENABLE(gc-threads,
+    [AC_HELP_STRING([--enable-gc-threads=yes|no],
+        [Enable threads])],
+    gc_threads=$enableval)
+    if test "${gc_threads}" = "yes"; then
+      AC_DEFINE([GC_THREADS], 1,
+                [Enable threads])
+    fi
 
 dnl Features which may be selected in the following thread-detection switch.
 AH_TEMPLATE([PARALLEL_MARK], [Define to enable parallel marking.])
@@ -916,12 +943,35 @@ if test x$enable_munmap != xno; then
     fi
     AC_DEFINE_UNQUOTED([MUNMAP_THRESHOLD], [${MUNMAP_THRESHOLD}],
         [Number of GC cycles to wait before unmapping an unused block.])
-else
+fi
+
+AC_ARG_ENABLE(mmap,
+    [AC_HELP_STRING([--enable-mmap=yes|no],
+        [return page to the os if empty for N collections])],
+    gc_use_mmap=$enableval)
     if test "${gc_use_mmap}" = "yes"; then
       AC_DEFINE([USE_MMAP], 1,
                 [Define to use mmap instead of sbrk to expand the heap.])
     fi
-fi
+
+AC_ARG_ENABLE(ignore-dynamic-loading,
+    [AC_HELP_STRING([--enable-ignore-dynamic-loading=yes|no],
+        [Don't define DYNAMIC_LOADING even if supported])],
+    ignore_dynamic_loading=$enableval)
+    if test "${ignore_dynamic_loading}" = "yes"; then
+      AC_DEFINE([IGNORE_DYNAMIC_LOADING], 1,
+                [Don't define DYNAMIC_LOADING even if supported])
+    fi
+
+AC_ARG_ENABLE(dont-register-main-static-data,
+    [AC_HELP_STRING([--enable-dont-register-main-static-data=yes|no],
+        [GC_DONT_REGISTER_MAIN_STATIC_DATA])],
+    dont_register_main_static_data=$enableval)
+    if test "${dont_register_main_static_data}" = "yes"; then
+      AC_DEFINE([GC_DONT_REGISTER_MAIN_STATIC_DATA], 1,
+                [GC_DONT_REGISTER_MAIN_STATIC_DATA])
+    fi
+
 
 AC_ARG_ENABLE(checksums,
     [AS_HELP_STRING([--enable-checksums],
