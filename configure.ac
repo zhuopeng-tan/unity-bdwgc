@@ -882,23 +882,6 @@ if test "${enable_handle_fork}" = yes; then
 elif test "${enable_handle_fork}" = no; then
     AC_DEFINE(NO_HANDLE_FORK, 1,
               [Prohibit installation of pthread_atfork() handlers.])
-elif test "${enable_handle_fork}" != manual -a x$THREADS = xposix; then
-    # If the option is omitted, pthread_atfork handlers are installed
-    # by default for the targets where pthread_atfork is known to work.
-    case "$host" in
-      *-*-darwin*)
-        # The incremental mode (which is off if parallel marking) conflicts
-        # with fork handling on Darwin.
-        if test "${enable_parallel_mark}" != no; then
-          AC_DEFINE(HANDLE_FORK)
-        fi
-        ;;
-      *-*-aix* | *-*-cygwin* | *-*-freebsd* | *-*-haiku* | \
-      *-*-hpux11* | *-*-irix* | *-*-kfreebsd*-gnu | \
-      *-*-*linux* | *-*-netbsd* | *-*-openbsd* | *-*-osf* | *-*-solaris*)
-        AC_DEFINE(HANDLE_FORK)
-        ;;
-    esac
 fi
 
 dnl This is something of a hack.  When cross-compiling we turn off
