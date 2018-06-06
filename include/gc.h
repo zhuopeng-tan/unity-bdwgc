@@ -2024,6 +2024,10 @@ GC_API void GC_CALL GC_win32_free_heap(void);
         (*GC_amiga_allocwrapper_do)(a,GC_malloc_atomic_ignore_off_page)
 #endif /* _AMIGA && !GC_AMIGA_MAKINGLIB */
 
+/* Unity specific APIs */
+GC_API void GC_CALL GC_stop_world_external();
+GC_API void GC_CALL GC_start_world_external();
+
 /* APIs for getting access to raw GC heap */
 /* These are NOT thread safe, so should be called with GC lock held */
 typedef void (*GC_heap_section_proc)(void* user_data, GC_PTR start, GC_PTR end);
