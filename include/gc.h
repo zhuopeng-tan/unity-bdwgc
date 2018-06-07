@@ -1696,6 +1696,9 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #   endif
 
 #   if defined(GC_BUILD) || !defined(GC_DONT_INCLUDE_WINDOWS_H)
+#     ifndef WIN32_LEAN_AND_MEAN
+#     define WIN32_LEAN_AND_MEAN
+#     endif
 #     include <windows.h>
 #     define GC_WINDOWS_H_INCLUDED
 #   endif

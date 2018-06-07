@@ -814,7 +814,7 @@ GC_API int GC_CALL GC_is_init_called(void)
 
 #if defined(MSWIN32) && !defined(MSWINRT_FLAVOR) && (!defined(SMALL_CONFIG) \
                          || (!defined(_WIN64) && defined(GC_WIN32_THREADS) \
-                             && defined(CHECK_NOT_WOW64)))
+                             && defined(CHECK_NOT_WOW64))) && !defined(_XBOX_ONE)
   STATIC void GC_win32_MessageBoxA(const char *msg, const char *caption,
                                    unsigned flags)
   {
@@ -903,7 +903,7 @@ GC_API void GC_CALL GC_init(void)
 #   endif
 
 #   if defined(MSWIN32) && !defined(_WIN64) && defined(GC_WIN32_THREADS) \
-       && defined(CHECK_NOT_WOW64)
+       && defined(CHECK_NOT_WOW64) && !defined(_XBOX_ONE)
       {
         /* Windows: running 32-bit GC on 64-bit system is broken!       */
         /* WoW64 bug affects SuspendThread, no workaround exists.       */
@@ -1927,7 +1927,7 @@ GC_API GC_warn_proc GC_CALL GC_get_warn_proc(void)
 #   endif
 
     if (msg != NULL) {
-#     if defined(MSWIN32) && !defined(MSWINRT) && !defined(_XBOX_ONE)
+#     if defined(MSWIN32) && !defined(MSWINRT_FLAVOR) && !defined(_XBOX_ONE)
         GC_win32_MessageBoxA(msg, "Fatal error in GC", MB_ICONERROR | MB_OK);
         /* Also duplicate msg to GC log file.   */
 #     endif
