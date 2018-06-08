@@ -55,6 +55,7 @@ pkgconfig_DATA = bdw-gc.pc
 # ---------
 
 lib_LTLIBRARIES += libgc.la
+lib_LTLIBRARIES += libgc-static.la
 
 if SINGLE_GC_OBJ
 
@@ -110,6 +111,8 @@ endif
 # End of !SINGLE_GC_OBJ
 endif
 
+libgc_static_la_SOURCES = $(libgc_la_SOURCES)
+
 if USE_INTERNAL_LIBATOMIC_OPS
 nodist_libgc_la_SOURCES = libatomic_ops/src/atomic_ops.c
 endif
@@ -117,6 +120,8 @@ endif
 if NEED_ATOMIC_OPS_ASM
 nodist_libgc_la_SOURCES = libatomic_ops/src/atomic_ops_sysdeps.S
 endif
+
+nodist_libgc_static_la_SOURCES = $(nodist_libgc_la_SOURCES)
 
 # Include THREADDLLIBS here to ensure that the correct versions of
 # linuxthread semaphore functions get linked:
@@ -127,6 +132,12 @@ libgc_la_LDFLAGS = $(extra_ldflags_libgc) -version-info $(LIBGC_VER_INFO) \
 
 EXTRA_libgc_la_SOURCES = ia64_save_regs_in_stack.s sparc_mach_dep.S \
     sparc_netbsd_mach_dep.s sparc_sunos4_mach_dep.s
+
+libgc_static_la_LIBADD = $(libgc_la_LIBADD)
+libgc_static_la_DEPENDENCIES = $(libgc_la_DEPENDENCIES)
+libgc_static_la_LDFLAGS = -static
+
+EXTRA_libgc_static_la_SOURCES = $(EXTRA_libgc_la_SOURCES)
 
 
 # C++ Interface

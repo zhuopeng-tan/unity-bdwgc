@@ -575,7 +575,7 @@ EXTERN_C_BEGIN
 #       define ABORT(msg) { GC_on_abort(msg); \
                             _CrtDbgBreak() /* __debugbreak() */; }
 #     else
-#       define ABORT(msg) { GC_on_abort(msg); DebugBreak(); }
+#       define ABORT(msg) { GC_on_abort(msg); __debugbreak(); }
                 /* Note that: on a WinCE box, this could be silently    */
                 /* ignored (i.e., the program is not aborted);          */
                 /* DebugBreak is a statement in some toolchains.        */

@@ -1215,6 +1215,9 @@ STATIC void GC_suspend(GC_thread t)
                 /* TRUE only if GC_stop_world() acquired GC_write_cs.   */
 #endif
 
+/* Defined in misc.c */
+extern CRITICAL_SECTION GC_write_cs;
+
 GC_INNER void GC_stop_world(void)
 {
   DWORD thread_id = GetCurrentThreadId();
@@ -2192,7 +2195,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
   STATIC void * GC_CALLBACK GC_win32_start_inner(struct GC_stack_base *sb,
                                                  void *arg)
   {
-    void * ret;
+    void * ret = NULL;
     LPTHREAD_START_ROUTINE start = ((thread_args *)arg)->start;
     LPVOID param = ((thread_args *)arg)->param;
 

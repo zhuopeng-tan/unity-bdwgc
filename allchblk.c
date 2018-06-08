@@ -396,10 +396,20 @@ GC_INNER int GC_unmap_threshold = MUNMAP_THRESHOLD;
 /* way blocks are ever unmapped.                                          */
 GC_INNER void GC_unmap_old(void)
 {
+    word sz;
+    unsigned short last_rec, threshold;
     int i;
 
-    if (GC_unmap_threshold == 0)
-      return; /* unmapping disabled */
+/* NOTE: Xbox One (DURANGO) may not need to be this aggressive, but the default
+ * is likely too lax under heavy allocation pressure.  The platform does not
+ * have a virtual paging system, so it does not have a large virtual address
+ * space that a standard x64 platform has.
+ */
+#if defined(SN_TARGET_PS3) || defined(SN_TARGET_PSP2) || defined(SN_TARGET_ORBIS) || defined(_XBOX_ONE)
+#   define UNMAP_THRESHOLD 2
+#else
+#   define UNMAP_THRESHOLD 6
+#endif
 
     for (i = 0; i <= N_HBLK_FLS; ++i) {
       struct hblk * h;
@@ -409,11 +419,12 @@ GC_INNER void GC_unmap_old(void)
         hhdr = HDR(h);
         if (!IS_MAPPED(hhdr)) continue;
 
-        /* Check that the interval is larger than the threshold (the    */
-        /* truncated counter value wrapping is handled correctly).      */
-        if ((unsigned short)(GC_gc_no - hhdr->hb_last_reclaimed) >
-                (unsigned short)GC_unmap_threshold) {
-          GC_unmap((ptr_t)h, (size_t)hhdr->hb_sz);
+        threshold = (unsigned short)(GC_gc_no - UNMAP_THRESHOLD);
+        last_rec = hhdr -> hb_last_reclaimed;
+        if ((last_rec > GC_gc_no || last_rec < threshold)
+            && threshold < GC_gc_no /* not recently wrapped */) {
+                sz = hhdr -> hb_sz;
+          GC_unmap((ptr_t)h, sz);
           hhdr -> hb_flags |= WAS_UNMAPPED;
         }
       }

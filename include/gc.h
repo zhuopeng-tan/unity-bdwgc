@@ -1696,6 +1696,9 @@ GC_API void GC_CALL GC_register_has_static_roots_callback(
 #   endif
 
 #   if defined(GC_BUILD) || !defined(GC_DONT_INCLUDE_WINDOWS_H)
+#     ifndef WIN32_LEAN_AND_MEAN
+#     define WIN32_LEAN_AND_MEAN
+#     endif
 #     include <windows.h>
 #     define GC_WINDOWS_H_INCLUDED
 #   endif
@@ -2023,6 +2026,16 @@ GC_API void GC_CALL GC_win32_free_heap(void);
 # define GC_malloc_atomic_ignore_off_page(a) \
         (*GC_amiga_allocwrapper_do)(a,GC_malloc_atomic_ignore_off_page)
 #endif /* _AMIGA && !GC_AMIGA_MAKINGLIB */
+
+/* Unity specific APIs */
+GC_API void GC_CALL GC_stop_world_external();
+GC_API void GC_CALL GC_start_world_external();
+
+/* APIs for getting access to raw GC heap */
+/* These are NOT thread safe, so should be called with GC lock held */
+typedef void (*GC_heap_section_proc)(void* user_data, GC_PTR start, GC_PTR end);
+GC_API void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback);
+GC_API GC_word GC_get_heap_section_count();
 
 #ifdef __cplusplus
   } /* extern "C" */

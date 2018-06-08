@@ -14,6 +14,7 @@
  */
 
 #include "private/gc_pmark.h"
+#include "private/gc_priv.h"
 
 #include <stdio.h>
 #include <limits.h>
@@ -34,6 +35,11 @@
 # endif
 # define NOSERVICE
 # include <windows.h>
+#ifdef MSWINRT
+# include <windows.storage.h>
+  // This API is defined in roapi.h, but we cannot include it here since it does not compile in C -_-
+  DECLSPEC_IMPORT HRESULT WINAPI RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void** factory);
+#endif
 #endif
 
 #if defined(UNIX_LIKE) || defined(CYGWIN32) || defined(SYMBIAN)
@@ -808,7 +814,7 @@ GC_API int GC_CALL GC_is_init_called(void)
 
 #if defined(MSWIN32) && !defined(MSWINRT_FLAVOR) && (!defined(SMALL_CONFIG) \
                          || (!defined(_WIN64) && defined(GC_WIN32_THREADS) \
-                             && defined(CHECK_NOT_WOW64)))
+                             && defined(CHECK_NOT_WOW64))) && !defined(_XBOX_ONE)
   STATIC void GC_win32_MessageBoxA(const char *msg, const char *caption,
                                    unsigned flags)
   {
@@ -897,7 +903,7 @@ GC_API void GC_CALL GC_init(void)
 #   endif
 
 #   if defined(MSWIN32) && !defined(_WIN64) && defined(GC_WIN32_THREADS) \
-       && defined(CHECK_NOT_WOW64)
+       && defined(CHECK_NOT_WOW64) && !defined(_XBOX_ONE)
       {
         /* Windows: running 32-bit GC on 64-bit system is broken!       */
         /* WoW64 bug affects SuspendThread, no workaround exists.       */
@@ -954,6 +960,7 @@ GC_API void GC_CALL GC_init(void)
 #     else
         {
 #         ifndef MSWINCE
+#         ifndef MSWINRT
             BOOL (WINAPI *pfn)(LPCRITICAL_SECTION, DWORD) = 0;
             HMODULE hK32 = GetModuleHandle(TEXT("kernel32.dll"));
             if (hK32)
@@ -963,8 +970,13 @@ GC_API void GC_CALL GC_init(void)
             if (pfn) {
               pfn(&GC_allocate_ml, SPIN_COUNT);
             } else
+#          else
+		        InitializeCriticalSectionAndSpinCount(&GC_allocate_ml, 4000);
+#          endif            
 #         endif /* !MSWINCE */
+#         ifndef MSWINRT
           /* else */ InitializeCriticalSection(&GC_allocate_ml);
+#         endif          
         }
 #     endif
 #   endif /* GC_WIN32_THREADS */
@@ -1536,6 +1548,7 @@ GC_API void GC_CALL GC_enable_incremental(void)
       logPath = pathBuf;
 #   endif
 
+#   ifndef MSWINRT
     /* Use GetEnvironmentVariable instead of GETENV() for unicode support. */
 #   ifndef NO_GETENV_WIN32
       if (GetEnvironmentVariable(TEXT("GC_LOG_FILE"), pathBuf,
@@ -1558,7 +1571,9 @@ GC_API void GC_CALL GC_enable_incremental(void)
               sizeof(TEXT(".") TEXT(GC_LOG_STD_NAME)));
 #     endif
     }
+#   endif
 
+#   ifndef MSWINRT
     hFile = CreateFile(logPath, GENERIC_WRITE, FILE_SHARE_READ,
                        NULL /* lpSecurityAttributes */,
                        appendToFile ? OPEN_ALWAYS : CREATE_ALWAYS,
@@ -1566,6 +1581,29 @@ GC_API void GC_CALL GC_enable_incremental(void)
                             /* immediately flush writes unless very verbose */
                             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
                        NULL /* hTemplateFile */);
+#   else
+      {
+        if (GetWinRTLogPath(pathBuf, MAX_PATH + 1))
+        {
+          CREATEFILE2_EXTENDED_PARAMETERS extendedParameters;
+          ZeroMemory(&extendedParameters, sizeof(extendedParameters));
+
+          extendedParameters.dwSize = sizeof(CREATEFILE2_EXTENDED_PARAMETERS);
+          extendedParameters.dwFileFlags = GC_print_stats == VERBOSE
+            ? 0
+            : /* immediately flush writes unless very verbose */ FILE_FLAG_WRITE_THROUGH;
+          extendedParameters.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+
+          hFile = CreateFile2(logPath, GENERIC_WRITE, FILE_SHARE_READ,
+            appendToFile ? OPEN_ALWAYS : CREATE_ALWAYS,
+            &extendedParameters);
+        }
+        else
+        {
+          hFile = INVALID_HANDLE_VALUE;
+        }
+      }
+#   endif
 
 #   ifndef NO_GETENV_WIN32
       if (appendToFile && hFile != INVALID_HANDLE_VALUE) {
@@ -1889,7 +1927,7 @@ GC_API GC_warn_proc GC_CALL GC_get_warn_proc(void)
 #   endif
 
     if (msg != NULL) {
-#     if defined(MSWIN32)
+#     if defined(MSWIN32) && !defined(MSWINRT_FLAVOR) && !defined(_XBOX_ONE)
         GC_win32_MessageBoxA(msg, "Fatal error in GC", MB_ICONERROR | MB_OK);
         /* Also duplicate msg to GC log file.   */
 #     endif

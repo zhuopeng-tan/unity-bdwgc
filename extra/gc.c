@@ -62,6 +62,9 @@
 #include "../os_dep.c"
 #include "../thread_local_alloc.c"
 
+/* Unity specific includes */
+#include "../heapsections.c"
+
 /* Most platform-specific files go here... */
 #include "../darwin_stop_world.c"
 #include "../dyn_load.c"
