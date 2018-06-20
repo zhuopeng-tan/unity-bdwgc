@@ -245,6 +245,13 @@
 #    endif
 #  endif
 
+#if !defined(UNCOND_LOCK)
+       extern void GC_lock(void);
+       extern void GC_unlock(void);
+#      define UNCOND_LOCK() GC_lock()
+#      define UNCOND_UNLOCK() GC_unlock()
+#endif
+
    EXTERN_C_END
 
 # else /* !THREADS */

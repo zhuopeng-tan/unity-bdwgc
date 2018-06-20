@@ -22,7 +22,11 @@ EXTERN_C_BEGIN
 
 struct thread_stop_info {
 #   if !defined(GC_OPENBSD_UTHREADS) && !defined(NACL)
-      volatile AO_t last_stop_count;
+#     ifdef GC_ATOMIC_OPS_H
+        volatile AO_t last_stop_count;
+#     else
+        word last_stop_count;
+#     endif
                         /* The value of GC_stop_count when the thread   */
                         /* last successfully handled a suspend signal.  */
 #   endif
@@ -44,6 +48,11 @@ struct thread_stop_info {
 #     endif
       ptr_t reg_storage[NACL_GC_REG_STORAGE_SIZE];
 #   endif
+
+#if defined(SN_TARGET_ORBIS)
+#   define ORBIS_GC_REG_STORAGE_SIZE 27
+    __uint64_t registers[ORBIS_GC_REG_STORAGE_SIZE];
+#endif
 };
 
 GC_INNER void GC_stop_init(void);

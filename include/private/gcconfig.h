@@ -83,6 +83,10 @@ EXTERN_C_BEGIN
 # define HOST_ANDROID 1
 #endif
 
+#if defined(HOST_ANDROID)
+#define IGNORE_PROG_DATA_START
+#endif
+
 #if defined(TIZEN) && !defined(HOST_TIZEN)
 # define HOST_TIZEN 1
 #endif

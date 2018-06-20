@@ -1935,9 +1935,17 @@ STATIC void GC_pause(void)
 {
     int i;
 
+#ifndef GC_ATOMIC_OPS_H
+    volatile word dummy = 0;
+#endif
+
     for (i = 0; i < GC_PAUSE_SPIN_CYCLES; ++i) {
         /* Something that's unlikely to be optimized away. */
+#ifndef GC_ATOMIC_OPS_H
+        GC_noop1(++dummy);
+#else
         AO_compiler_barrier();
+#endif
     }
 }
 #endif
