@@ -30,8 +30,14 @@
 #ifndef __cplusplus
   /* static is desirable here for more efficient linkage.               */
   /* TODO: Enable this in case of the compilation as C++ code.          */
+#if IL2CPP_ENABLE_STRICT_WRITE_BARRIERS
+/* We need all il2cpp symbols to be public when using write barrier     */
+/* validation, so that we can patch them.                               */
+# define GC_API __attribute__((visibility("default")))
+#else
 # define GC_INNER STATIC
 # define GC_EXTERN GC_INNER
+#endif
                 /* STATIC is defined in gcconfig.h. */
 #endif
 
