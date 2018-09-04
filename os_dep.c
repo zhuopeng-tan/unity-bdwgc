@@ -3041,7 +3041,7 @@ GC_API GC_push_other_roots_proc GC_CALL GC_get_push_other_roots(void)
 
   /* Mark the page containing p as dirty.  Logically, this dirties the  */
   /* entire object.                                                     */
-  GC_INNER void GC_dirty_inner(const void *p)
+  GC_API void GC_dirty_inner(const void *p)
   {
     word index = PHT_HASH(p);
     async_set_pht_entry_from_index(GC_dirty_pages, index);
