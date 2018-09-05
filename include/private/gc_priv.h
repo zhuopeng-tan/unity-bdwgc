@@ -2181,7 +2181,7 @@ GC_EXTERN GC_bool GC_print_back_height;
 #endif /* !GC_DISABLE_INCREMENTAL */
 
 #ifdef MANUAL_VDB
-  GC_API void GC_dirty_inner(const void *p); /* does not require locking */
+  GC_API_PATCHABLE void GC_dirty_inner(const void *p); /* does not require locking */
 # define GC_dirty(p) (GC_incremental ? GC_dirty_inner(p) : (void)0)
 #else
 # define GC_dirty(p) (void)(p)
