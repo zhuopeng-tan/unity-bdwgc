@@ -489,13 +489,16 @@ static void alloc_mark_stack(size_t);
       /* It's conceivable that this is the same issue with       */
       /* terminating threads that we see with Linux and          */
       /* USE_PROC_FOR_LIBRARIES.                                 */
-
+#ifndef NO_CRT
       __try {
+#endif
           ret_val = GC_mark_some_inner(cold_gc_frame);
+#ifndef NO_CRT
       } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ?
                 EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
           goto handle_ex;
       }
+#endif
 #     if defined(GC_WIN32_THREADS) && !defined(GC_PTHREADS)
         /* With DllMain-based thread tracking, a thread may have        */
         /* started while we were marking.  This is logically equivalent */

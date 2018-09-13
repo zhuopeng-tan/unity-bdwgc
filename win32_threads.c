@@ -2216,13 +2216,13 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
     /* Clear the thread entry even if we exit with an exception.        */
     /* This is probably pointless, since an uncaught exception is       */
     /* supposed to result in the process being killed.                  */
-#   ifndef __GNUC__
+#if !defined(__GNUC__) && !defined(NO_CRT)
       __try
 #   endif
     {
       ret = (void *)(word)(*start)(param);
     }
-#   ifndef __GNUC__
+#if !defined(__GNUC__) && !defined(NO_CRT)
       __finally
 #   endif
     {
@@ -2290,7 +2290,7 @@ GC_INNER void GC_get_next_stack(char *start, char *limit,
     ExitThread(dwExitCode);
   }
 
-# if !defined(CYGWIN32) && !defined(MSWINCE) && !defined(MSWIN_XBOX1)
+# if !defined(NO_CRT) && !defined(CYGWIN32) && !defined(MSWINCE) && !defined(MSWIN_XBOX1)
     GC_API GC_uintptr_t GC_CALL GC_beginthreadex(
                                   void *security, unsigned stack_size,
                                   unsigned (__stdcall *start_address)(void *),

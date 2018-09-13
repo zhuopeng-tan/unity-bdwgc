@@ -1650,7 +1650,7 @@ GC_API void GC_CALL GC_enable_incremental(void)
 #       endif
       }
       res = WriteFile(GC_log, buf, (DWORD)len, &written, NULL);
-#     if defined(_MSC_VER) && defined(_DEBUG)
+#     if defined(_MSC_VER) && defined(_DEBUG) && !defined(NO_CRT)
 #         ifdef MSWINCE
               /* There is no CrtDbgReport() in WinCE */
               {
@@ -1768,6 +1768,7 @@ GC_API void GC_CALL GC_enable_incremental(void)
 
 #define BUFSZ 1024
 
+#if !defined(NO_CRT)
 #if defined(DJGPP) || defined(__STRICT_ANSI__)
   /* vsnprintf is missing in DJGPP (v2.0.3) */
 # define GC_VSNPRINTF(buf, bufsz, format, args) vsprintf(buf, format, args)
@@ -1781,12 +1782,13 @@ GC_API void GC_CALL GC_enable_incremental(void)
 #else
 # define GC_VSNPRINTF vsnprintf
 #endif
-
+#endif
 /* A version of printf that is unlikely to call malloc, and is thus safer */
 /* to call from the collector in case malloc has been bound to GC_malloc. */
 /* Floating point arguments and formats should be avoided, since FP       */
 /* conversion is more likely to allocate memory.                          */
 /* Assumes that no more than BUFSZ-1 characters are written at once.      */
+#if defined(GC_VSNPRINTF)
 #define GC_PRINTF_FILLBUF(buf, format) \
         do { \
           va_list args; \
@@ -1797,7 +1799,11 @@ GC_API void GC_CALL GC_enable_incremental(void)
           if ((buf)[sizeof(buf) - 1] != 0x15) \
             ABORT("GC_printf clobbered stack"); \
         } while (0)
-
+#else
+#define GC_PRINTF_FILLBUF(buf, format) \
+      do { \
+      } while (0)
+#endif
 void GC_printf(const char *format, ...)
 {
     if (!GC_quiet) {
