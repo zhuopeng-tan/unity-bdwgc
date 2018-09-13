@@ -30,18 +30,8 @@
 #ifndef __cplusplus
   /* static is desirable here for more efficient linkage.               */
   /* TODO: Enable this in case of the compilation as C++ code.          */
-#if IL2CPP_ENABLE_STRICT_WRITE_BARRIERS
-#if defined(__GNUC__)
-# define GC_API __attribute__((visibility("default")))
-# define GC_API_PATCHABLE GC_API __attribute__ ((noinline))
-#else
-# define GC_API __declspec( dllexport )
-# define GC_API_PATCHABLE GC_API __declspec(noinline)
-#endif
-#else
 # define GC_INNER STATIC
 # define GC_EXTERN GC_INNER
-#endif
                 /* STATIC is defined in gcconfig.h. */
 #endif
 
