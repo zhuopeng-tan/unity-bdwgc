@@ -2299,6 +2299,19 @@ EXTERN_C_BEGIN
 #     define DATASTART GC_FreeBSDGetDataStart(0x1000, (ptr_t)etext)
 #     define DATASTART_USES_BSDGETDATASTART
 #   endif
+#   ifdef NINTENDO_SWITCH
+      static int zero_fd = -1;
+#     define OPT_MAP_ANON 0
+      extern int __bss_end[];
+#     define NO_HANDLE_FORK
+#     define GETPAGESIZE() 4096
+#     define DATASTART (ptr_t)ALIGNMENT /* cannot be null */
+#     define DATAEND (ptr_t)(&__bss_end)
+      void *switch_get_stack_bottom(void);
+#     define STACKBOTTOM ((ptr_t)switch_get_stack_bottom())
+#     undef USE_MMAP
+#     undef USE_MUNMAP
+#   endif
 #   ifdef NOSYS
       /* __data_start is usually defined in the target linker script.   */
       extern int __data_start[];
@@ -2436,14 +2449,6 @@ EXTERN_C_BEGIN
 #     define DATAEND (ptr_t)(Image$$ZI$$ZI$$Limit)
       void *n3ds_get_stack_bottom(void);
 #     define STACKBOTTOM ((ptr_t)n3ds_get_stack_bottom())
-#   endif
-#   ifdef NINTENDO_SWITCH
-      extern int __bss_end[];
-#     define NO_HANDLE_FORK
-#     define DATASTART (ptr_t)ALIGNMENT /* cannot be null */
-#     define DATAEND (ptr_t)(&__bss_end)
-      void *switch_get_stack_bottom(void);
-#     define STACKBOTTOM ((ptr_t)switch_get_stack_bottom())
 #   endif
 #   ifdef NOSYS
       /* __data_start is usually defined in the target linker script.  */
