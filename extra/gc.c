@@ -31,9 +31,13 @@
   /* static is desirable here for more efficient linkage.               */
   /* TODO: Enable this in case of the compilation as C++ code.          */
 #if IL2CPP_ENABLE_STRICT_WRITE_BARRIERS
-/* We need all il2cpp symbols to be public when using write barrier     */
-/* validation, so that we can patch them.                               */
+#if defined(__GNUC__)
 # define GC_API __attribute__((visibility("default")))
+# define GC_API_PATCHABLE GC_API __attribute__ ((noinline))
+#else
+# define GC_API __declspec( dllexport )
+# define GC_API_PATCHABLE GC_API __declspec(noinline)
+#endif
 #else
 # define GC_INNER STATIC
 # define GC_EXTERN GC_INNER
