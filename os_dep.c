@@ -3041,11 +3041,13 @@ GC_API GC_push_other_roots_proc GC_CALL GC_get_push_other_roots(void)
 
   /* Mark the page containing p as dirty.  Logically, this dirties the  */
   /* entire object.                                                     */
-  GC_API_PATCHABLE void GC_dirty_inner(const void *p)
+#if !IL2CPP_ENABLE_WRITE_BARRIER_VALIDATION
+  GC_API void GC_dirty_inner(const void *p)
   {
     word index = PHT_HASH(p);
     async_set_pht_entry_from_index(GC_dirty_pages, index);
   }
+#endif
 
 # ifdef CHECKSUMS
     /* Could any valid GC heap pointer ever have been written to this page? */

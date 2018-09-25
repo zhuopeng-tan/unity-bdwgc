@@ -227,10 +227,6 @@
 # define GC_CALLBACK GC_CALL
 #endif
 
-#ifndef GC_API_PATCHABLE
-# define GC_API_PATCHABLE GC_API
-#endif
-
 #ifndef GC_ATTR_MALLOC
   /* 'malloc' attribute should be used for all malloc-like functions    */
   /* (to tell the compiler that a function may be treated as if any     */

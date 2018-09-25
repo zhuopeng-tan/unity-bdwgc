@@ -334,6 +334,7 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_kind_global(size_t lb, int k)
   }
 #endif
 
+#if !IL2CPP_ENABLE_WRITE_BARRIER_VALIDATION
 /* Allocate lb bytes of atomic (pointer-free) data.     */
 GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_atomic(size_t lb)
 {
@@ -345,6 +346,7 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc(size_t lb)
 {
     return GC_malloc_kind(lb, NORMAL);
 }
+#endif
 
 GC_API GC_ATTR_MALLOC void * GC_CALL GC_generic_malloc_uncollectable(
                                                         size_t lb, int k)
@@ -405,11 +407,13 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_generic_malloc_uncollectable(
     return op;
 }
 
+#if !IL2CPP_ENABLE_WRITE_BARRIER_VALIDATION
 /* Allocate lb bytes of pointerful, traced, but not collectible data.   */
 GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_uncollectable(size_t lb)
 {
   return GC_generic_malloc_uncollectable(lb, UNCOLLECTABLE);
 }
+#endif
 
 #ifdef GC_ATOMIC_UNCOLLECTABLE
   /* Allocate lb bytes of pointer-free, untraced, uncollectible data    */
@@ -553,6 +557,7 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_uncollectable(size_t lb)
 
 #endif /* REDIRECT_MALLOC */
 
+#if !IL2CPP_ENABLE_WRITE_BARRIER_VALIDATION
 /* Explicitly deallocate an object p.                           */
 GC_API void GC_CALL GC_free(void * p)
 {
@@ -618,6 +623,7 @@ GC_API void GC_CALL GC_free(void * p)
         UNLOCK();
     }
 }
+#endif
 
 /* Explicitly deallocate an object p when we already hold lock.         */
 /* Only used for internally allocated objects, so we can take some      */
