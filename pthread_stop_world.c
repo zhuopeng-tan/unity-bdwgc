@@ -889,19 +889,20 @@ GC_INNER void GC_stop_world(void)
 # else
     AO_store(&GC_stop_count, (AO_t)((word)GC_stop_count + 2));
         /* Only concurrent reads are possible. */
-    if (GC_manual_vdb) {
-      GC_acquire_dirty_lock();
-      /* The write fault handler cannot be called if GC_manual_vdb      */
-      /* (thus double-locking should not occur in                       */
-      /* async_set_pht_entry_from_index based on test-and-set).         */
-    }
+# ifdef MANUAL_VDB
+    GC_acquire_dirty_lock();
+    /* The write fault handler cannot be called if GC_manual_vdb      */
+    /* (thus double-locking should not occur in                       */
+    /* async_set_pht_entry_from_index based on test-and-set).         */
+# endif
     AO_store_release(&GC_world_is_stopped, TRUE);
     n_live_threads = GC_suspend_all();
     if (GC_retry_signals)
       n_live_threads = resend_lost_signals(n_live_threads, GC_suspend_all);
     suspend_restart_barrier(n_live_threads);
-    if (GC_manual_vdb)
-      GC_release_dirty_lock(); /* cannot be done in GC_suspend_all */
+# ifdef MANUAL_VDB
+    GC_release_dirty_lock(); /* cannot be done in GC_suspend_all */
+# endif    
 # endif
 
 # ifdef PARALLEL_MARK
