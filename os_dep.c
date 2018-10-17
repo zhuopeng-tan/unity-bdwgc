@@ -3059,6 +3059,8 @@ GC_API GC_push_other_roots_proc GC_CALL GC_get_push_other_roots(void)
 # else
 #   error No test_and_set operation: Introduces a race.
 # endif /* THREADS && !AO_HAVE_test_and_set_acquire */
+#else
+# define async_set_pht_entry_from_index(db, index)
 #endif /* !GC_DISABLE_INCREMENTAL */
 
   /* Mark the page containing p as dirty.  Logically, this dirties the  */
