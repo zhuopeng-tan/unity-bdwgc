@@ -393,7 +393,9 @@ GC_API GC_ATTR_DEPRECATED unsigned long GC_time_limit;
                         /* avoid data races (if the value is modified   */
                         /* after the GC is put to multi-threaded mode). */
 GC_API void GC_CALL GC_set_time_limit(unsigned long);
+GC_API void GC_CALL GC_set_time_limit_ns(unsigned long);
 GC_API unsigned long GC_CALL GC_get_time_limit(void);
+GC_API unsigned long GC_CALL GC_get_time_limit_ns(void);
 
 /* Public procedures */
 

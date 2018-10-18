@@ -1105,7 +1105,7 @@ GC_API void GC_CALL GC_init(void)
             WARN("GC_PAUSE_TIME_TARGET environment variable value too small "
                  "or bad syntax: Ignoring\n", 0);
           } else {
-            GC_time_limit = time_limit;
+            GC_time_limit = time_limit * 1000000;
           }
         }
       }
@@ -2543,10 +2543,21 @@ GC_API int GC_CALL GC_get_full_freq(void)
 GC_API void GC_CALL GC_set_time_limit(unsigned long value)
 {
     GC_ASSERT(value != (unsigned long)-1L);
-    GC_time_limit = value;
+    GC_time_limit = value * 1000000;
 }
 
 GC_API unsigned long GC_CALL GC_get_time_limit(void)
+{
+    return GC_time_limit / 1000000;
+}
+
+GC_API void GC_CALL GC_set_time_limit_ns(unsigned long value)
+{
+    GC_ASSERT(value != (unsigned long)-1L);
+    GC_time_limit = value;
+}
+
+GC_API unsigned long GC_CALL GC_get_time_limit_ns(void)
 {
     return GC_time_limit;
 }
