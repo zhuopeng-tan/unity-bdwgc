@@ -444,14 +444,16 @@ EXTERN_C_END
 # define NOSERVICE
 # include <windows.h>
 # include <winbase.h>
-# define CLOCK_TYPE DWORD
-# ifdef MSWINRT_FLAVOR
-#   define GET_TIME(x) (void)(x = (DWORD)GetTickCount64())
-# else
-#   define GET_TIME(x) (void)(x = GetTickCount())
-# endif
-# define MS_TIME_DIFF(a,b) ((long)((a)-(b)))
-# define NS_TIME_DIFF(a,b) ((long)((a)-(b)) * 1000000)
+# define CLOCK_TYPE LONGLONG
+# define GET_TIME(x) \
+                do { \
+                  LARGE_INTEGER freq, t; \
+                  QueryPerformanceFrequency(&freq); \
+                  QueryPerformanceCounter(&t); \
+                  x = t.QuadPart * 1000000000 / freq.QuadPart; \
+                } while (0)
+# define MS_TIME_DIFF(a,b) (((a) - (b)) * 1000000)
+# define NS_TIME_DIFF(a,b) ((a) - (b))
 #elif defined(NN_PLATFORM_CTR)
 # define CLOCK_TYPE long long
   EXTERN_C_BEGIN
