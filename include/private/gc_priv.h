@@ -435,8 +435,8 @@ EXTERN_C_END
                 } while (0)
 # define MS_TIME_DIFF(a,b) ((unsigned long)(a.tv_sec - b.tv_sec) * 1000 \
                             + (unsigned long)(a.tv_usec - b.tv_usec) / 1000)
-# define NS_TIME_DIFF(a,b) ((unsigned long)(a.tv_sec - b.tv_sec) * 1000000000 \
-                            + (unsigned long)(a.tv_usec - b.tv_usec) * 1000)
+# define NS_TIME_DIFF(a,b) ((unsigned long long)(a.tv_sec - b.tv_sec) * 1000000000 \
+                            + (unsigned long long)(a.tv_usec - b.tv_usec) * 1000)
 #elif defined(MSWIN32) || defined(MSWINCE)
 # ifndef WIN32_LEAN_AND_MEAN
 #   define WIN32_LEAN_AND_MEAN 1
@@ -462,7 +462,7 @@ EXTERN_C_END
   EXTERN_C_END
 # define GET_TIME(x) (void)(x = n3ds_get_system_tick())
 # define MS_TIME_DIFF(a,b) ((long)n3ds_convert_tick_to_ms((a)-(b)))
-# define NS_TIME_DIFF(a,b) ((long)n3ds_convert_tick_to_ms((a)-(b)) * 1000000)
+# define NS_TIME_DIFF(a,b) ((long long)n3ds_convert_tick_to_ms((a)-(b)) * 1000000)
 #else /* !BSD_TIME && !NN_PLATFORM_CTR && !MSWIN32 && !MSWINCE */
 # include <time.h>
 # if defined(FREEBSD) && !defined(CLOCKS_PER_SEC)
@@ -486,7 +486,7 @@ EXTERN_C_END
 # define MS_TIME_DIFF(a,b) (CLOCKS_PER_SEC % 1000 == 0 ? \
         (unsigned long)((a) - (b)) / (unsigned long)(CLOCKS_PER_SEC / 1000) \
         : ((unsigned long)((a) - (b)) * 1000) / (unsigned long)CLOCKS_PER_SEC)
-# define NS_TIME_DIFF(a,b) (((unsigned long)((a) - (b)) * 1000000000) / (unsigned long)CLOCKS_PER_SEC)
+# define NS_TIME_DIFF(a,b) (((unsigned long long)((a) - (b)) * 1000000000) / (unsigned long long)CLOCKS_PER_SEC)
   /* Avoid using double type since some targets (like ARM) might        */
   /* require -lm option for double-to-long conversion.                  */
 #endif /* !BSD_TIME && !MSWIN32 */
