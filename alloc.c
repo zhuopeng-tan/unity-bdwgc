@@ -181,11 +181,11 @@ GC_INNER int GC_CALLBACK GC_never_stop_func(void)
 }
 
 #if defined(GC_TIME_LIMIT) && !defined(CPPCHECK)
-  unsigned long GC_time_limit = GC_TIME_LIMIT * 1000000;
+  unsigned long long GC_time_limit = GC_TIME_LIMIT * 1000000;
                            /* We try to keep pause times from exceeding  */
                            /* this by much. In milliseconds.             */
 #else
-  unsigned long GC_time_limit = 50000000;
+  unsigned long long GC_time_limit = 50000000;
 #endif
 
 #ifndef NO_CLOCK

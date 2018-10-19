@@ -2551,13 +2551,13 @@ GC_API unsigned long GC_CALL GC_get_time_limit(void)
     return GC_time_limit / 1000000;
 }
 
-GC_API void GC_CALL GC_set_time_limit_ns(unsigned long value)
+GC_API void GC_CALL GC_set_time_limit_ns(unsigned long long value)
 {
-    GC_ASSERT(value != (unsigned long)-1L);
+    GC_ASSERT(value != (unsigned long long)-1L);
     GC_time_limit = value;
 }
 
-GC_API unsigned long GC_CALL GC_get_time_limit_ns(void)
+GC_API unsigned long long GC_CALL GC_get_time_limit_ns(void)
 {
     return GC_time_limit;
 }
