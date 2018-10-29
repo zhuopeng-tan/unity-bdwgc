@@ -226,7 +226,7 @@ GC_API GC_stop_func GC_CALL GC_get_stop_func(void)
   {
     CLOCK_TYPE current_time;
     static unsigned count = 0;
-    unsigned long time_diff;
+    long long time_diff;
 
     if ((*GC_default_stop_func)())
       return(1);
