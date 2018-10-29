@@ -181,11 +181,11 @@ GC_INNER int GC_CALLBACK GC_never_stop_func(void)
 }
 
 #if defined(GC_TIME_LIMIT) && !defined(CPPCHECK)
-  unsigned long GC_time_limit = GC_TIME_LIMIT;
+  unsigned long long GC_time_limit = GC_TIME_LIMIT * 1000000;
                            /* We try to keep pause times from exceeding  */
                            /* this by much. In milliseconds.             */
 #else
-  unsigned long GC_time_limit = 50;
+  unsigned long long GC_time_limit = 50000000;
 #endif
 
 #ifndef NO_CLOCK
@@ -233,7 +233,7 @@ GC_API GC_stop_func GC_CALL GC_get_stop_func(void)
 
     if ((count++ & 3) != 0) return(0);
     GET_TIME(current_time);
-    time_diff = MS_TIME_DIFF(current_time,GC_start_time);
+    time_diff = NS_TIME_DIFF(current_time,GC_start_time);
     if (time_diff >= GC_time_limit) {
         GC_COND_LOG_PRINTF(
                 "Abandoning stopped marking after %lu msecs (attempt %d)\n",

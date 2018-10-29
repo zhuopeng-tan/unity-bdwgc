@@ -375,7 +375,7 @@ GC_API GC_ATTR_DEPRECATED int GC_dont_precollect;
 GC_API void GC_CALL GC_set_dont_precollect(int);
 GC_API int GC_CALL GC_get_dont_precollect(void);
 
-GC_API GC_ATTR_DEPRECATED unsigned long GC_time_limit;
+GC_API GC_ATTR_DEPRECATED unsigned long long GC_time_limit;
                                /* If incremental collection is enabled, */
                                /* We try to terminate collections       */
                                /* after this many milliseconds.  Not a  */
@@ -384,7 +384,7 @@ GC_API GC_ATTR_DEPRECATED unsigned long GC_time_limit;
                                /* disable incremental collection while  */
                                /* leaving generational collection       */
                                /* enabled.                              */
-#define GC_TIME_UNLIMITED 999999
+#define GC_TIME_UNLIMITED 999999999999
                                /* Setting GC_time_limit to this value   */
                                /* will disable the "pause time exceeded"*/
                                /* tests.                                */
@@ -393,7 +393,9 @@ GC_API GC_ATTR_DEPRECATED unsigned long GC_time_limit;
                         /* avoid data races (if the value is modified   */
                         /* after the GC is put to multi-threaded mode). */
 GC_API void GC_CALL GC_set_time_limit(unsigned long);
+GC_API void GC_CALL GC_set_time_limit_ns(unsigned long long);
 GC_API unsigned long GC_CALL GC_get_time_limit(void);
+GC_API unsigned long long GC_CALL GC_get_time_limit_ns(void);
 
 /* Public procedures */
 
