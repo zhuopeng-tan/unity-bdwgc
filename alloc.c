@@ -236,7 +236,7 @@ GC_API GC_stop_func GC_CALL GC_get_stop_func(void)
     time_diff = NS_TIME_DIFF(current_time,GC_start_time);
     if (time_diff >= GC_time_limit) {
         GC_COND_LOG_PRINTF(
-                "Abandoning stopped marking after %lu msecs (attempt %d)\n",
+                "Abandoning stopped marking after %lld nanoseconds (attempt %d)\n",
                 time_diff, GC_n_attempts);
         return(1);
     }
