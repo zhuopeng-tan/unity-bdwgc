@@ -12,7 +12,7 @@ static void signal_handler(int signum, siginfo_t* siginfo, void* sigcontext)
 }
 
 extern int __real_sigaction(int signum, const struct sigaction *action, struct sigaction *old_action);
-int __wrap_sigaction(int signum, const struct sigaction *action, struct sigaction *old_action)
+__attribute__((used)) int __wrap_sigaction(int signum, const struct sigaction *action, struct sigaction *old_action)
 {
   struct sigaction  wrapper_action_data;
   struct sigaction* wrapper_action = NULL;
