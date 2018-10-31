@@ -262,7 +262,7 @@ STATIC void GC_suspend_handler_inner(ptr_t dummy, void *context);
 # define GC_lookup_thread_async GC_lookup_thread
 #endif
 
-GC_INLINE void GC_store_stack_ptr(GC_thread me)
+GC_INLINE void GC_store_stack_ptr(GC_thread me, void * context GC_ATTR_UNUSED)
 {
   /* There is no data race between the suspend handler (storing         */
   /* stack_ptr) and GC_push_all_stacks (fetching stack_ptr) because     */
@@ -277,8 +277,20 @@ GC_INLINE void GC_store_stack_ptr(GC_thread me)
 # else
 #   ifdef IA64
       me -> backing_store_ptr = GC_save_regs_in_stack();
+  /* For known architectures we support, use SP stored in context. */
+  /* This prevents disaster if we are running an alternate stack.  */
+#   elif defined(LINUX) && (defined(X86_64) || defined(I386))
+        ucontext_t* uc = (ucontext_t*)context;
+        AO_store((volatile AO_t *)&me->stop_info.stack_ptr,
+#       ifdef X86_64
+            (AO_t)uc->uc_mcontext.gregs[REG_RSP]
+#       else
+            (AO_t)uc->uc_mcontext.gregs[REG_ESP]
+#       endif
+        );
+#   else
+	    AO_store((volatile AO_t *)&me->stop_info.stack_ptr, (AO_t)GC_approx_sp());
 #   endif
-    AO_store((volatile AO_t *)&me->stop_info.stack_ptr, (AO_t)GC_approx_sp());
 # endif
 }
 
@@ -310,7 +322,7 @@ STATIC void GC_suspend_handler_inner(ptr_t dummy GC_ATTR_UNUSED,
 
 # ifdef GC_ENABLE_SUSPEND_THREAD
     if (AO_load(&me->suspended_ext)) {
-      GC_store_stack_ptr(me);
+      GC_store_stack_ptr(me, context);
       sem_post(&GC_suspend_ack_sem);
       suspend_self_inner(me);
 #     ifdef DEBUG_THREADS
@@ -330,7 +342,7 @@ STATIC void GC_suspend_handler_inner(ptr_t dummy GC_ATTR_UNUSED,
       RESTORE_CANCEL(cancel_state);
       return;
   }
-  GC_store_stack_ptr(me);
+  GC_store_stack_ptr(me, context);
 
 # ifdef THREAD_SANITIZER
     /* TSan disables signals around signal handlers.  Without   */
