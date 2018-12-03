@@ -3590,4 +3590,12 @@ EXTERN_C_BEGIN
 
 EXTERN_C_END
 
+#ifndef SMALL_CONFIG
+/* We were running out of memory due to the fact that 
+ * GC has a static sized array for heap segments, and without
+ * LARGE_CONFIG you go OOM at around 1.8 GB on 64-bit.
+ * Note, we define it everywhere on Mono. */
+#define LARGE_CONFIG
+#endif
+
 #endif /* GCCONFIG_H */
