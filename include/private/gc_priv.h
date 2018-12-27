@@ -450,7 +450,7 @@ EXTERN_C_END
                   LARGE_INTEGER freq, t; \
                   QueryPerformanceFrequency(&freq); \
                   QueryPerformanceCounter(&t); \
-                  x = t.QuadPart * (1000000000.0 / (double)freq.QuadPart); \
+                  x = (LONGLONG)(t.QuadPart * (1000000000.0 / (double)freq.QuadPart)); \
                 } while (0)
 # define MS_TIME_DIFF(a,b) ((unsigned long)(((a) - (b)) / 1000000))
 # define NS_TIME_DIFF(a,b) ((a) - (b))
