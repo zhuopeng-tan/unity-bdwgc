@@ -2584,3 +2584,13 @@ GC_API void GC_CALL GC_start_world_external()
     START_WORLD();
     UNLOCK();
 }
+
+/* Disable incremental GC. Only tested with MANUAL_VDB mode. Might */
+/* require extra teardown work when using other VDB configs.*/
+GC_API void GC_CALL GC_disable_incremental(void)
+{
+  LOCK();
+  GC_gcollect_inner();
+  GC_incremental = FALSE;
+  UNLOCK();
+}
