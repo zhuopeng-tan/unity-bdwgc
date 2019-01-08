@@ -2591,6 +2591,8 @@ GC_API void GC_CALL GC_disable_incremental(void)
 {
   LOCK();
   GC_gcollect_inner();
+#ifndef GC_DISABLE_INCREMENTAL
   GC_incremental = FALSE;
+#endif
   UNLOCK();
 }
