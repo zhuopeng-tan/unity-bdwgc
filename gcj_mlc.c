@@ -154,7 +154,7 @@ GC_API void GC_CALL GC_init_gcj_vector (int mp_index,
   if ((unsigned)mp_index >= GC_n_mark_procs)
     ABORT ("GC_init_gcj_vector: bad index");
   GC_gcjvecfreelist = (ptr_t *)GC_new_free_list_inner ();
-  GC_gcj_vector_kind = GC_new_kind_inner (GC_gcjvecfreelist,
+  GC_gcj_vector_kind = GC_new_kind_inner ((void **)GC_gcjvecfreelist,
     GC_MAKE_PROC (mp_index,
       0),
     FALSE, TRUE);
