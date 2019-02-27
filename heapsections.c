@@ -27,20 +27,20 @@ static struct hblk* GetNextFreeBlock(ptr_t ptr)
 
 static void CallHeapSectionCallback(void* user_data, ptr_t start, ptr_t end, GC_heap_section_proc callback)
 {
-    hdr *hhdr = HDR(start);
-    
-    // Validate that the heap block is valid, then fire our callback.
-    if (IS_FORWARDING_ADDR_OR_NIL(hhdr) || HBLK_IS_FREE(hhdr)) {
-        return;
-    }
+	hdr *hhdr = HDR(start);
 
-    callback(user_data, start, end);
+	// Validate that the heap block is valid, then fire our callback.
+	if (IS_FORWARDING_ADDR_OR_NIL(hhdr) || HBLK_IS_FREE(hhdr)) {
+		return;
+	}
+	
+	callback(user_data, start, end);
 }
 
 void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback)
 {
 	unsigned i;
-    struct hblk* nextFreeBlock = NULL;
+	struct hblk* nextFreeBlock = NULL;
 
 	GC_ASSERT(I_HOLD_LOCK());
 
@@ -77,7 +77,7 @@ void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback)
 			{
 				size_t sectionLength = (char*)nextFreeBlock - sectionStart;
 				if (sectionLength > 0)
-                    CallHeapSectionCallback(user_data, sectionStart, sectionStart + sectionLength, callback);
+					CallHeapSectionCallback(user_data, sectionStart, sectionStart + sectionLength, callback);
 				sectionStart = (char*)nextFreeBlock + HDR(nextFreeBlock)->hb_sz;
 			}
 		}
