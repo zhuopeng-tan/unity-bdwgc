@@ -1200,10 +1200,12 @@ STATIC void GC_suspend(GC_thread t)
         return;
       }
 
-      DWORD res;
-      do {
-        res = SuspendThread (t->handle);
-      } while (res == (DWORD)-1);
+      {
+        DWORD res;
+        do {
+          res = SuspendThread (t->handle);
+        } while (res == (DWORD)-1);
+      }
 
       t->saved_context.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL;
       if (GetThreadContext (t->handle, &t->saved_context)) {
