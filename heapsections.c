@@ -25,9 +25,22 @@ static struct hblk* GetNextFreeBlock(ptr_t ptr)
 	return result;
 }
 
+static void CallHeapSectionCallback(void* user_data, ptr_t start, ptr_t end, GC_heap_section_proc callback)
+{
+	hdr *hhdr = HDR(start);
+
+	// Validate that the heap block is valid, then fire our callback.
+	if (IS_FORWARDING_ADDR_OR_NIL(hhdr) || HBLK_IS_FREE(hhdr)) {
+		return;
+	}
+	
+	callback(user_data, start, end);
+}
+
 void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback)
 {
 	unsigned i;
+	struct hblk* nextFreeBlock = NULL;
 
 	GC_ASSERT(I_HOLD_LOCK());
 
@@ -38,7 +51,7 @@ void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback)
 	{
 		ptr_t sectionStart = GC_heap_sects[i].hs_start;
 		ptr_t sectionEnd = sectionStart + GC_heap_sects[i].hs_bytes;
-
+       
 		/* Merge in contiguous sections. Copied from GC_dump_regions
 
 		A free block might start in one heap section and extend
@@ -49,24 +62,22 @@ void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback)
 		{
 			++i;
 			sectionEnd = GC_heap_sects[i].hs_start + GC_heap_sects[i].hs_bytes;
-		}
+        }
 
 		while (sectionStart < sectionEnd)
 		{
-			struct hblk* nextFreeBlock = GetNextFreeBlock(sectionStart);
+			nextFreeBlock = GetNextFreeBlock(sectionStart);
 
 			if (nextFreeBlock == NULL || (ptr_t)nextFreeBlock > sectionEnd)
 			{
-				callback(user_data, sectionStart, sectionEnd);
+				CallHeapSectionCallback(user_data, sectionStart, sectionEnd, callback);
 				break;
 			}
 			else
 			{
 				size_t sectionLength = (char*)nextFreeBlock - sectionStart;
-
 				if (sectionLength > 0)
-					callback(user_data, sectionStart, sectionStart + sectionLength);
-
+					CallHeapSectionCallback(user_data, sectionStart, sectionStart + sectionLength, callback);
 				sectionStart = (char*)nextFreeBlock + HDR(nextFreeBlock)->hb_sz;
 			}
 		}
