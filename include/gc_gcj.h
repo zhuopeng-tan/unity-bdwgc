@@ -68,8 +68,6 @@
 /* (GC_GCJ_RESERVED_MARK_PROC_INDEX in gc_mark.h) is an obvious choice. */
 GC_API void GC_CALL GC_init_gcj_malloc(int /* mp_index */,
                                 void * /* really mark_proc */ /* mp */);
-GC_API void GC_CALL GC_init_gcj_vector (int /* mp_index */,
-	void * /* really mark_proc */ /* mp */);
 
 /* Allocate an object, clear it, and store the pointer to the   */
 /* type structure (vtable in gcj).                              */
@@ -90,10 +88,6 @@ GC_API GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1) void * GC_CALL
 GC_API GC_ATTR_MALLOC GC_ATTR_ALLOC_SIZE(1) void * GC_CALL
         GC_gcj_malloc_ignore_off_page(size_t /* lb */,
                                 void * /* ptr_to_struct_containing_descr */);
-
-GC_API GC_ATTR_MALLOC void * GC_CALL
-        GC_gcj_vector_malloc(size_t /* lb */,
-                      void * /* ptr_to_struct_containing_descr */);
 
 /* The kind numbers of normal and debug gcj objects.            */
 /* Useful only for debug support, we hope.                      */
