@@ -64,6 +64,7 @@
 
 /* Unity specific includes */
 #include "../heapsections.c"
+#include "../vector_mlc.c"
 
 /* Most platform-specific files go here... */
 #include "../darwin_stop_world.c"

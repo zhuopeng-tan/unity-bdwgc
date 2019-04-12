@@ -46,24 +46,13 @@
 #endif
 GC_bool GC_gcj_malloc_initialized = FALSE;
 
-#ifdef GC_ASSERTIONS
-  GC_INNER /* variable is also used in thread_local_alloc.c */
-#else
-  STATIC
-#endif
-GC_bool GC_gcj_vector_initialized = FALSE;
-
 int GC_gcj_kind = 0;    /* Object kind for objects with descriptors     */
                         /* in "vtable".                                 */
 int GC_gcj_debug_kind = 0;
                         /* The kind of objects that is always marked    */
                         /* with a mark proc call.                       */
 
-int GC_gcj_vector_kind = 0;    /* Object kind for objects with descriptors     */
-            /* in "vtable".                                 */
-
 GC_INNER ptr_t * GC_gcjobjfreelist = NULL;
-GC_INNER ptr_t * GC_gcjvecfreelist = NULL;
 
 STATIC struct GC_ms_entry * GC_gcj_fake_mark_proc(word * addr GC_ATTR_UNUSED,
                         struct GC_ms_entry *mark_stack_ptr,
@@ -130,36 +119,6 @@ GC_API void GC_CALL GC_init_gcj_malloc(int mp_index,
                                 FALSE, TRUE);
       }
     UNLOCK();
-}
-
-/* Caller does not hold allocation lock. */
-GC_API void GC_CALL GC_init_gcj_vector (int mp_index,
-  void * /* really GC_mark_proc */mp)
-{
-  DCL_LOCK_STATE;
-
-  if (mp == 0)        /* In case GC_DS_PROC is unused.        */
-    ABORT ("GC_init_gcj_vector: bad index");
-
-  GC_init ();  /* In case it's not already done.       */
-  LOCK ();
-  if (GC_gcj_vector_initialized) {
-    UNLOCK ();
-    return;
-  }
-  GC_gcj_vector_initialized = TRUE;
-
-  GC_ASSERT (GC_mark_procs[mp_index] == (GC_mark_proc)0); /* unused */
-  GC_mark_procs[mp_index ] = (GC_mark_proc)(word)mp;
-  if ((unsigned)mp_index >= GC_n_mark_procs)
-    ABORT ("GC_init_gcj_vector: bad index");
-  GC_gcjvecfreelist = (ptr_t *)GC_new_free_list_inner ();
-  GC_gcj_vector_kind = GC_new_kind_inner ((void **)GC_gcjvecfreelist,
-    GC_MAKE_PROC (mp_index,
-      0),
-    FALSE, TRUE);
-
-  UNLOCK ();
 }
 
 #define GENERAL_MALLOC_INNER(lb,k) \
@@ -239,53 +198,6 @@ static void maybe_finalize(void)
     return((void *) op);
 }
 
-#ifdef THREAD_LOCAL_ALLOC
-#error No THREAD_LOCAL_ALLOC support for GC_gcj_vector_malloc
-#else
-  GC_API GC_ATTR_MALLOC void * GC_CALL GC_gcj_vector_malloc (size_t lb,
-    void * ptr_to_struct_containing_descr)
-#endif
-  {
-    ptr_t op;
-    DCL_LOCK_STATE;
-
-    GC_DBG_COLLECT_AT_MALLOC (lb);
-    if (SMALL_OBJ (lb)) {
-      word lg;
-
-      LOCK ();
-      lg = GC_size_map[lb];
-      op = GC_gcjvecfreelist[lg];
-      if (EXPECT (0 == op, FALSE)) {
-        maybe_finalize ();
-        op = (ptr_t)GENERAL_MALLOC_INNER ((word)lb, GC_gcj_vector_kind);
-        if (0 == op) {
-          GC_oom_func oom_fn = GC_oom_fn;
-          UNLOCK ();
-          return((*oom_fn)(lb));
-        }
-      }
-      else {
-        GC_gcjvecfreelist[lg] = (ptr_t)obj_link (op);
-        GC_bytes_allocd += GRANULES_TO_BYTES ((word)lg);
-      }
-      GC_ASSERT (((void **)op)[1] == 0);
-    }
-    else {
-      LOCK ();
-      maybe_finalize ();
-      op = (ptr_t)GENERAL_MALLOC_INNER ((word)lb, GC_gcj_vector_kind);
-      if (0 == op) {
-        GC_oom_func oom_fn = GC_oom_fn;
-        UNLOCK ();
-        return((*oom_fn)(lb));
-      }
-    }
-    *(void **)op = ptr_to_struct_containing_descr;
-    UNLOCK ();
-    GC_dirty (op);
-    return((void *)op);
-  }
 #endif
 
 /* Similar to GC_gcj_malloc, but add debug info.  This is allocated     */
