@@ -124,8 +124,9 @@ STATIC void GC_grow_table(struct hash_chain_entry ***table,
     GC_ASSERT(I_HOLD_LOCK());
     /* Avoid growing the table in case of at least 25% of entries can   */
     /* be deleted by enforcing a collection.  Ignored for small tables. */
-    /* In incremental mode we skip this optimization, as we want to     */
+    /* UNITY: we always skip this optimization, as we want to           */
     /* avoid triggering a full GC whenever possible.                    */
+#ifdef UNITY_ENABLE_GC_ON_GROW_LOG_SIZE_MIN
     if (log_old_size >= GC_ON_GROW_LOG_SIZE_MIN && !GC_incremental) {
       IF_CANCEL(int cancel_state;)
 
@@ -136,6 +137,7 @@ STATIC void GC_grow_table(struct hash_chain_entry ***table,
       if (*entries_ptr < ((word)1 << log_old_size) - (*entries_ptr >> 2))
         return;
     }
+#endif
 
     new_table = (struct hash_chain_entry **)
                     GC_INTERNAL_MALLOC_IGNORE_OFF_PAGE(
