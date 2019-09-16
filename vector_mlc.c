@@ -92,7 +92,8 @@ GC_API void GC_CALL GC_init_gcj_vector (int mp_index,
 
 #if !IL2CPP_ENABLE_WRITE_BARRIER_VALIDATION
 #ifdef THREAD_LOCAL_ALLOC
-#error No THREAD_LOCAL_ALLOC support for GC_gcj_vector_malloc
+  GC_INNER void * GC_gcj_vector_malloc(size_t lb,
+                                     void * ptr_to_struct_containing_descr)
 #else
   GC_API GC_ATTR_MALLOC void * GC_CALL GC_gcj_vector_malloc (size_t lb,
     void * ptr_to_struct_containing_descr)
