@@ -2030,8 +2030,8 @@ GC_API void GC_CALL GC_win32_free_heap(void);
 #endif /* _AMIGA && !GC_AMIGA_MAKINGLIB */
 
 /* Unity specific APIs */
-GC_API void GC_CALL GC_stop_world_external();
-GC_API void GC_CALL GC_start_world_external();
+GC_API void GC_CALL GC_stop_world_external(void);
+GC_API void GC_CALL GC_start_world_external(void);
 
 GC_API void GC_CALL GC_disable_incremental(void);
 
@@ -2039,7 +2039,7 @@ GC_API void GC_CALL GC_disable_incremental(void);
 /* These are NOT thread safe, so should be called with GC lock held */
 typedef void (*GC_heap_section_proc)(void* user_data, GC_PTR start, GC_PTR end);
 GC_API void GC_foreach_heap_section(void* user_data, GC_heap_section_proc callback);
-GC_API GC_word GC_get_heap_section_count();
+GC_API GC_word GC_get_heap_section_count(void);
 
 #ifdef __cplusplus
   } /* extern "C" */
