@@ -141,74 +141,107 @@ GC_API void GC_CALL GC_init_gcj_vector (int mp_index,
   }
 #define ELEMENT_CHUNK_SIZE 256
 
-GC_API mse * GC_CALL
-  GC_gcj_vector_mark_proc (mse *mark_stack_ptr, GC_descr element_desc, word *start, word *end, int words_per_element)
+GC_API mse *GC_CALL
+GC_gcj_vector_mark_proc (mse *mark_stack_ptr, GC_descr element_desc, word *start, word *end, int words_per_element)
 {
-	/* create new descriptor that is shifted two bits to account 
-	* for lack of object header. Descriptors for value types include
-	* the object header for boxed values */
+  /* create new descriptor that is shifted two bits to account 
+  * for lack of object header. Descriptors for value types include
+  * the object header for boxed values */
 
-	/* remove tags */
-	GC_descr element_desc_shifted = element_desc & ~(GC_DS_TAGS);
-	/* shift actual bits */
-	element_desc_shifted = element_desc_shifted << 2;
-	/* shifted and unmasked desc to use for bulk processing */
-	GC_descr element_desc_shifted_unmasked = element_desc_shifted;
-	/* add back tag to indicate descriptor is a bitmap */
-	element_desc_shifted |= GC_DS_BITMAP;
+  /* remove tags */
+  GC_descr element_desc_shifted = element_desc & ~(GC_DS_TAGS);
+  /* shift actual bits */
+  element_desc_shifted = element_desc_shifted << 2;
+  /* shifted and unmasked desc to use for bulk processing */
+  GC_descr element_desc_shifted_unmasked = element_desc_shifted;
+  /* add back tag to indicate descriptor is a bitmap */
+  element_desc_shifted |= GC_DS_BITMAP;
 
-	/* attempt to bulk process multiple elements with single descriptor */
-	size_t elements_per_desc = (CPP_WORDSZ - GC_DS_TAG_BITS) / words_per_element;
+  size_t remaining_elements = (end - start) / words_per_element;
 
-	size_t remaining_elements = (end - start) / words_per_element;
-	size_t bulk_count = remaining_elements / elements_per_desc;
-	size_t remainder_count = remaining_elements % elements_per_desc;
+  /* attempt to bulk process multiple elements with single descriptor */
+  size_t elements_per_desc = (CPP_WORDSZ - GC_DS_TAG_BITS) / words_per_element;
 
-	word *current = start;
 
-  size_t i;
+  /* setup bulk processing */
+  if (elements_per_desc > 1) {
+    word *current = start;
+    size_t bulk_count = remaining_elements / elements_per_desc;
+    size_t remainder_count = remaining_elements % elements_per_desc;
 
-	// bulk
-	if (bulk_count) {
-		size_t bulk_stride = elements_per_desc * words_per_element;
+    /* bulk processing */
+    if (bulk_count) {
+      size_t bulk_stride = elements_per_desc * words_per_element;
+      GC_descr bulk_desc = 0;
+      size_t i;
+      for (i = 0; i < elements_per_desc; ++i) {
+        bulk_desc |= element_desc_shifted_unmasked >> (i * words_per_element);
+      }
+      bulk_desc |= GC_DS_BITMAP;
 
-		if (bulk_count > ELEMENT_CHUNK_SIZE) {
-			bulk_count = ELEMENT_CHUNK_SIZE;
-			/* clear remainder as we have more bulk to process next time */
-			remainder_count = 0;
+      if (bulk_count > ELEMENT_CHUNK_SIZE) {
+        bulk_count = ELEMENT_CHUNK_SIZE;
 
-			/* only process chunk number of items */
-			end = start + bulk_count * bulk_stride;
+        /* only process chunk number of items */
+        end = start + bulk_count * bulk_stride;
 
-			mark_stack_ptr++;
-			mark_stack_ptr->mse_descr.w = GC_MAKE_PROC (GC_gcj_vector_mp_index, 1 /* continue processing */);
-			mark_stack_ptr->mse_start = (ptr_t)end;
-		}
+        remainder_count = 0;
 
-		GC_descr bulk_desc = 0;
-		for (i = 0; i < elements_per_desc; ++i) {
-			bulk_desc |= element_desc_shifted_unmasked >> (i * words_per_element);
-		}
-		bulk_desc |= GC_DS_BITMAP;
+        mark_stack_ptr++;
+        mark_stack_ptr->mse_descr.w = GC_MAKE_PROC (GC_gcj_vector_mp_index, 1 /* continue processing */);
+        mark_stack_ptr->mse_start = (ptr_t)end;
+      }
 
-		for (i = 0; i < bulk_count; ++i, current += bulk_stride) {
-			mark_stack_ptr++;
+      while (bulk_count > 0) {
+        mark_stack_ptr++;
 
-			mark_stack_ptr->mse_start = (ptr_t) (current);
-			mark_stack_ptr->mse_descr.w = bulk_desc;
-		}
-	}
+        mark_stack_ptr->mse_start = (ptr_t) (current);
+        mark_stack_ptr->mse_descr.w = bulk_desc;
 
-	size_t remainder_stride = words_per_element;
-	// remainder
-	for (i = 0; i < remainder_count; ++i, current += remainder_stride) {
-		mark_stack_ptr++;
+        current += bulk_stride;
 
-		mark_stack_ptr->mse_start = (ptr_t) (current);
-		mark_stack_ptr->mse_descr.w = element_desc_shifted;
-	}
+        bulk_count--;
+      }
+    }
 
-	return (mark_stack_ptr);
+    while (remainder_count > 0) {
+      mark_stack_ptr++;
+
+      mark_stack_ptr->mse_start = (ptr_t) (current);
+      mark_stack_ptr->mse_descr.w = element_desc_shifted;
+
+      current += words_per_element;
+
+      remainder_count--;
+    }
+  } else {
+    size_t remainder_count = remaining_elements;
+
+    if (remainder_count > ELEMENT_CHUNK_SIZE) {
+      remainder_count = ELEMENT_CHUNK_SIZE;
+
+      /* only process chunk number of items */
+      end = start + remainder_count * words_per_element;
+
+      mark_stack_ptr++;
+      mark_stack_ptr->mse_descr.w = GC_MAKE_PROC (GC_gcj_vector_mp_index, 1 /* continue processing */);
+      mark_stack_ptr->mse_start = (ptr_t)end;
+    }
+
+    word *current = start;
+    while (remainder_count > 0) {
+      mark_stack_ptr++;
+
+      mark_stack_ptr->mse_start = (ptr_t) (current);
+      mark_stack_ptr->mse_descr.w = element_desc_shifted;
+
+      current += words_per_element;
+
+      remainder_count--;
+    }
+  }
+
+  return (mark_stack_ptr);
 }
 #endif
 
