@@ -122,6 +122,17 @@ static struct hblk * scan_ptr;
 STATIC GC_bool GC_objects_are_marked = FALSE;
                 /* Are there collectible marked objects in the heap?    */
 
+void GC_reset_mark_statics()
+{
+     GC_n_mark_procs = GC_RESERVED_MARK_PROCS;
+     GC_n_kinds = GC_N_KINDS_INITIAL_VALUE;
+     GC_mark_stack_size = 0;
+     GC_mark_state = MS_NONE;
+     GC_mark_stack_too_small = FALSE;
+     scan_ptr = NULL;
+     GC_objects_are_marked = FALSE;
+}
+
 /* Is a collection in progress?  Note that this can return true in the  */
 /* nonincremental case, if a collection has been abandoned and the      */
 /* mark state is now MS_INVALID.                                        */

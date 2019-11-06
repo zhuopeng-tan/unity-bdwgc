@@ -1428,6 +1428,13 @@ GC_API void GC_CALL GC_enable_incremental(void)
         DeleteCriticalSection(&GC_write_cs);
         DeleteCriticalSection(&GC_allocate_ml);
 #     endif
+        GC_clear_exclusion_table();
+        memset(&GC_arrays, 0, sizeof(GC_arrays));
+        GC_win32_free_heap();
+        GC_clear_freelist();
+        GC_clear_bottom_indices();
+        GC_clear_finalizable_object_table();
+        GC_reset_mark_statics();
     }
   }
 
