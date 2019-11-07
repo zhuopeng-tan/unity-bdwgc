@@ -1,5 +1,8 @@
 # Git repo attributes.
 
+# need LF enforced to make cygwin work
+*.sh	crlf=input
+
 # Ensure all text files have normalized (LF) line endings in the repository.
 * text=auto
 
@@ -10,5 +13,3 @@
 # Note: "core.eol" configuration variable controls which line endings to use
 # for the normalized files in the working directory (the default is native).
 
-# need LF enforced to make cygwin work
-*.sh	crlf=input
