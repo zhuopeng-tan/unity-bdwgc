@@ -1419,6 +1419,8 @@ GC_API void GC_CALL GC_enable_incremental(void)
   }
 #endif
 
+  extern void GC_reset_default_push_other_roots(void);
+
   GC_API void GC_CALL GC_deinit(void)
   {
     if (GC_is_initialized) {
