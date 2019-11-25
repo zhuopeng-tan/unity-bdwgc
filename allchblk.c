@@ -64,6 +64,12 @@
   word GC_free_bytes[N_HBLK_FLS+1] = { 0 };
         /* Number of free bytes on each list.  Remains visible to GCJ.  */
 
+void GC_clear_freelist(void)
+{
+    memset(GC_hblkfreelist, 0, sizeof(GC_hblkfreelist));
+    memset(GC_free_bytes, 0, sizeof(GC_free_bytes));
+}
+
 /* Return the largest n such that the number of free bytes on lists     */
 /* n .. N_HBLK_FLS is greater or equal to GC_max_large_allocd_bytes     */
 /* minus GC_large_allocd_bytes.  If there is no such n, return 0.       */
