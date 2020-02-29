@@ -70,6 +70,7 @@
 # define GC_WIN32_THREADS
 #endif
 
+
 #if defined(GC_AIX_THREADS) || defined(GC_DARWIN_THREADS) \
     || defined(GC_DGUX386_THREADS) || defined(GC_FREEBSD_THREADS) \
     || defined(GC_HPUX_THREADS) \
@@ -91,8 +92,8 @@
 #   define GC_HAIKU_THREADS
 # elif defined(__OpenBSD__)
 #   define GC_OPENBSD_THREADS
-# elif defined(__DragonFly__) || defined(__FreeBSD_kernel__) \
-       || (defined(__FreeBSD__) && !defined(GC_NO_FREEBSD_THREADS))
+# elif ( defined(__DragonFly__) || defined(__FreeBSD_kernel__) \
+       || defined(__FreeBSD__) ) && !defined(GC_NO_FREEBSD_THREADS)
 #   define GC_FREEBSD_THREADS
 # elif defined(__NetBSD__)
 #   define GC_NETBSD_THREADS
