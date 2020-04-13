@@ -764,7 +764,9 @@ EXTERN_C_END
 
 #include "../gc_tiny_fl.h"
 
+#if !defined(__wasi__)
 #include <setjmp.h>
+#endif
 
 EXTERN_C_BEGIN
 

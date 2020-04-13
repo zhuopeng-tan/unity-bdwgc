@@ -678,7 +678,7 @@ EXTERN_C_BEGIN
 #   define mach_type_known
 # endif
 
-# if defined(__EMSCRIPTEN__)
+# if defined(__EMSCRIPTEN__) || defined(__wasi__)
 #   define I386
 #   define mach_type_known
 # endif
@@ -881,7 +881,7 @@ EXTERN_C_BEGIN
 #   define DATAEND (ptr_t)ALIGNMENT
 # endif
 
-# ifdef __EMSCRIPTEN__
+# if defined(__EMSCRIPTEN__) || defined(__wasi__)
 #   define OS_TYPE "EMSCRIPTEN"
 #   define CPP_WORDSZ 32
 #   define ALIGNMENT 4
