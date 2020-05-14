@@ -93,7 +93,7 @@
 # elif defined(__OpenBSD__)
 #   define GC_OPENBSD_THREADS
 # elif ( defined(__DragonFly__) || defined(__FreeBSD_kernel__) \
-       || defined(__FreeBSD__) ) && !defined(GC_NO_FREEBSD_THREADS)
+       || defined(__FreeBSD__) ) && !defined(GC_NO_FREEBSD)
 #   define GC_FREEBSD_THREADS
 # elif defined(__NetBSD__)
 #   define GC_NETBSD_THREADS
