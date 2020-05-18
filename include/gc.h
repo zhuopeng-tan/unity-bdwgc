@@ -2034,6 +2034,7 @@ GC_API void GC_CALL GC_stop_world_external(void);
 GC_API void GC_CALL GC_start_world_external(void);
 
 GC_API void GC_CALL GC_disable_incremental(void);
+GC_API void GC_CALL GC_trigger_collection (void);
 
 /* APIs for getting access to raw GC heap */
 /* These are NOT thread safe, so should be called with GC lock held */

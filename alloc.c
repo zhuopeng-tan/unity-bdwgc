@@ -366,6 +366,12 @@ STATIC void GC_clear_a_few_frames(void)
 /* Heap size at which we need a collection to avoid expanding past      */
 /* limits used by blacklisting.                                         */
 STATIC word GC_collect_at_heapsize = (word)(-1);
+STATIC GC_bool GC_should_trigger_collection = FALSE;
+
+GC_API void GC_trigger_collection()
+{
+  GC_should_trigger_collection = TRUE;
+}
 
 /* Have we allocated enough to amortize a collection? */
 GC_INNER GC_bool GC_should_collect(void)
@@ -375,6 +381,11 @@ GC_INNER GC_bool GC_should_collect(void)
     if (last_gc_no != GC_gc_no) {
       last_gc_no = GC_gc_no;
       last_min_bytes_allocd = min_bytes_allocd();
+    }
+    if (GC_should_trigger_collection)
+    {
+      GC_should_trigger_collection = FALSE;
+      return TRUE;
     }
     return(GC_adj_bytes_allocd() >= last_min_bytes_allocd
            || GC_heapsize >= GC_collect_at_heapsize);
