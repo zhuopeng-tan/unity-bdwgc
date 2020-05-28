@@ -411,10 +411,12 @@ GC_INNER void GC_unmap_old(void)
  * have a virtual paging system, so it does not have a large virtual address
  * space that a standard x64 platform has.
  */
-#if defined(SN_TARGET_PS3) || defined(SN_TARGET_PSP2) || defined(SN_TARGET_ORBIS) || defined(_XBOX_ONE)
-#   define UNMAP_THRESHOLD 2
-#else
-#   define UNMAP_THRESHOLD 6
+#if !defined(UNMAP_THRESHOLD)
+  #if defined(SN_TARGET_PS3) || defined(SN_TARGET_PSP2)  || defined(_XBOX_ONE)
+  #   define UNMAP_THRESHOLD 2
+  #else
+  #   define UNMAP_THRESHOLD 6
+  #endif
 #endif
 
     for (i = 0; i <= N_HBLK_FLS; ++i) {
