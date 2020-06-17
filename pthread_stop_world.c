@@ -129,7 +129,7 @@ STATIC volatile AO_t GC_world_is_stopped = FALSE;
   STATIC GC_bool GC_retry_signals = TRUE;
 #else
   // Unity: Always enable retry signals, since any platform could lose signals
-  STATIC GC_bool GC_retry_signals = TRUE;
+  STATIC GC_bool GC_retry_signals = FALSE;
 #endif
 
 /*
