@@ -204,6 +204,17 @@ STATIC ptr_t GC_stack_range_for(ptr_t *phi, thread_act_t thread, GC_thread p,
 #   ifdef DEBUG_THREADS
       GC_log_printf("thread_get_state returns value = %d\n", kern_result);
 #   endif
+
+    if (kern_result == KERN_ABORTED)
+      ABORT("thread_get_state was aborted");
+
+    if (kern_result != KERN_SUCCESS)
+    {
+      char buf[1024];
+      sprintf(buf, "thread_get_state err %d", (int)kern_result);
+      ABORT(buf);
+    }
+
     if (kern_result != KERN_SUCCESS)
       ABORT("thread_get_state failed");
 
