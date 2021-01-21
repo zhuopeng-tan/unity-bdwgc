@@ -106,7 +106,17 @@ EXTERN_C_BEGIN
 
 /* And one for QNX: */
 # if defined(__QNX__)
-#    define I386
+#    if defined(__arm__) || defined(__ARM__)
+#        define ARM32
+#    elif defined(__aarch64__)
+#        define AARCH64
+#    elif defined(__amd64) || defined(__X86_64__)
+#        define X86_64
+#    elif defined(__X86__)
+#        define I386
+#    else
+#        error Unknown QNX target architecture detected.
+#    endif
 #    define OS_TYPE "QNX"
 #    define SA_RESTART 0
 #    define HEURISTIC1
@@ -3022,7 +3032,7 @@ EXTERN_C_BEGIN
 #if defined(SVR4) || defined(LINUX) || defined(IRIX5) || defined(HPUX) \
     || defined(OPENBSD) || defined(NETBSD) || defined(FREEBSD) \
     || defined(DGUX) || defined(BSD) || defined(HAIKU) || defined(HURD) \
-    || defined(AIX) || defined(DARWIN) || defined(OSF1)
+    || defined(AIX) || defined(DARWIN) || defined(OSF1) || defined(__QNX__)
 # define UNIX_LIKE      /* Basic Unix-like system calls work.   */
 #endif
 
