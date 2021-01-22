@@ -165,7 +165,7 @@ EXTERN_C_BEGIN
 # if defined(__aarch64__)
 #    define AARCH64
 #    if !defined(LINUX) && !defined(DARWIN) && !defined(FREEBSD) \
-        && !defined(NN_BUILD_TARGET_PLATFORM_NX)
+        && !defined(NN_BUILD_TARGET_PLATFORM_NX) && !defined(__QNX__)
 #      define NOSYS
 #      define mach_type_known
 #    endif
@@ -179,7 +179,7 @@ EXTERN_C_BEGIN
           && !defined(__CEGCC__) && !defined(NN_PLATFORM_CTR) \
           && !defined(NN_BUILD_TARGET_PLATFORM_NX) \
           && !defined(GC_NO_NOSYS) && !defined(SN_TARGET_PSP2) \
-          && !defined(SYMBIAN)
+          && !defined(SYMBIAN) && !defined(__QNX__)
 #      define NOSYS
 #      define mach_type_known
 #    endif
@@ -3156,7 +3156,7 @@ EXTERN_C_BEGIN
 
 #if ((defined(UNIX_LIKE) && (defined(DARWIN) || defined(HAIKU) \
                              || defined(HURD) || defined(OPENBSD) \
-                             || defined(ARM32) \
+                             || defined(ARM32) || defined(__QNX__) \
                              || defined(AVR32) || defined(MIPS) \
                              || defined(NIOS2) || defined(OR1K))) \
      || (defined(LINUX) && !defined(__gnu_linux__)) \
