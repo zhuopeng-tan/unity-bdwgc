@@ -106,6 +106,7 @@ EXTERN_C_BEGIN
 
 /* And one for QNX: */
 # if defined(__QNX__)
+#    define QNX_STACKBOTTOM 1
 #    if defined(__arm__) || defined(__ARM__)
 #        define ARM32
 #    elif defined(__aarch64__)
@@ -119,7 +120,6 @@ EXTERN_C_BEGIN
 #    endif
 #    define OS_TYPE "QNX"
 #    define SA_RESTART 0
-#    define HEURISTIC1
      extern char etext[];
      extern int _end[];
 #    define DATASTART ((ptr_t)(etext))
